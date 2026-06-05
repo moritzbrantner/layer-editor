@@ -223,6 +223,7 @@ export function LayerEditorPanel<TLayerData = Record<string, unknown>>({
   const groupedLayerIds = new Set(groups.flatMap((group) => group.layerIds));
   const ungroupedLayers = document.layers.filter((layer) => !groupedLayerIds.has(layer.id));
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
+  const [openLayerMenuLayerId, setOpenLayerMenuLayerId] = useState<string | null>(null);
 
   return (
     <div className={joinClassNames("mb-layer-editor", className)} role="tree">
@@ -235,6 +236,8 @@ export function LayerEditorPanel<TLayerData = Record<string, unknown>>({
           group={group}
           onDragLayerChange={setDraggedLayerId}
           onLayerMenuClick={onLayerMenuClick}
+          onOpenLayerMenuChange={setOpenLayerMenuLayerId}
+          openLayerMenuLayerId={openLayerMenuLayerId}
           readOnly={readOnly}
           renderLayerLabel={renderLayerLabel}
           renderLayerMeta={renderLayerMeta}
@@ -249,6 +252,8 @@ export function LayerEditorPanel<TLayerData = Record<string, unknown>>({
           layer={layer}
           onDragLayerChange={setDraggedLayerId}
           onLayerMenuClick={onLayerMenuClick}
+          onOpenLayerMenuChange={setOpenLayerMenuLayerId}
+          openLayerMenuLayerId={openLayerMenuLayerId}
           readOnly={readOnly}
           renderLayerLabel={renderLayerLabel}
           renderLayerMeta={renderLayerMeta}
@@ -268,6 +273,8 @@ export type LayerEditorGroupRowProps<TLayerData = Record<string, unknown>> = {
     layer: LayerEditorLayer<TLayerData>,
     event: MouseEvent<HTMLButtonElement>,
   ) => void;
+  onOpenLayerMenuChange: (layerId: string | null) => void;
+  openLayerMenuLayerId: string | null;
   readOnly?: boolean;
   renderLayerLabel?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
   renderLayerMeta?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
@@ -280,6 +287,8 @@ export function LayerEditorGroupRow<TLayerData = Record<string, unknown>>({
   group,
   onDragLayerChange,
   onLayerMenuClick,
+  onOpenLayerMenuChange,
+  openLayerMenuLayerId,
   readOnly = false,
   renderLayerLabel,
   renderLayerMeta,
@@ -304,6 +313,8 @@ export function LayerEditorGroupRow<TLayerData = Record<string, unknown>>({
             layer={layer}
             onDragLayerChange={onDragLayerChange}
             onLayerMenuClick={onLayerMenuClick}
+            onOpenLayerMenuChange={onOpenLayerMenuChange}
+            openLayerMenuLayerId={openLayerMenuLayerId}
             readOnly={readOnly}
             renderLayerLabel={renderLayerLabel}
             renderLayerMeta={renderLayerMeta}
@@ -324,6 +335,8 @@ export type LayerEditorLayerRowProps<TLayerData = Record<string, unknown>> = {
     layer: LayerEditorLayer<TLayerData>,
     event: MouseEvent<HTMLButtonElement>,
   ) => void;
+  onOpenLayerMenuChange: (layerId: string | null) => void;
+  openLayerMenuLayerId: string | null;
   readOnly?: boolean;
   renderLayerLabel?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
   renderLayerMeta?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
@@ -336,6 +349,8 @@ export function LayerEditorLayerRow<TLayerData = Record<string, unknown>>({
   layer,
   onDragLayerChange,
   onLayerMenuClick,
+  onOpenLayerMenuChange,
+  openLayerMenuLayerId,
   readOnly = false,
   renderLayerLabel,
   renderLayerMeta,
@@ -346,6 +361,7 @@ export function LayerEditorLayerRow<TLayerData = Record<string, unknown>>({
   const layerIndex = document.layers.findIndex((item) => item.id === layer.id);
   const visible = layer.visible ?? true;
   const locked = layer.locked ?? false;
+  const layerMenuOpen = openLayerMenuLayerId === layer.id;
 
   const handleSelect = (event: MouseEvent<HTMLDivElement>) => {
     controller.selectLayer(layer.id, event.shiftKey || event.ctrlKey || event.metaKey);
@@ -480,18 +496,72 @@ export function LayerEditorLayerRow<TLayerData = Record<string, unknown>>({
           {renderLayerMeta ? renderLayerMeta(layer) : `${Math.round((layer.opacity ?? 1) * 100)}%`}
         </span>
       </div>
-      <button
-        aria-haspopup="menu"
-        aria-label={`Layer menu ${layer.label}`}
-        className="mb-layer-editor__icon-button"
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onLayerMenuClick?.(layer, event);
-        }}
-      >
-        <MoreHorizontal aria-hidden="true" size={16} />
-      </button>
+      <div className="mb-layer-editor__layer-options">
+        <button
+          aria-expanded={layerMenuOpen}
+          aria-haspopup="menu"
+          aria-label={`Layer menu ${layer.label}`}
+          className="mb-layer-editor__icon-button"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onLayerMenuClick?.(layer, event);
+            if (!event.defaultPrevented) {
+              onOpenLayerMenuChange(layerMenuOpen ? null : layer.id);
+            }
+          }}
+        >
+          <MoreHorizontal aria-hidden="true" size={16} />
+        </button>
+        {layerMenuOpen ? (
+          <div
+            aria-label={`${layer.label} options`}
+            className="mb-layer-editor__layer-menu"
+            role="menu"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                onOpenLayerMenuChange(null);
+              }
+            }}
+          >
+            <button
+              className="mb-layer-editor__layer-menu-item"
+              disabled={readOnly}
+              role="menuitem"
+              type="button"
+              onClick={() => {
+                controller.toggleLayerVisibility(layer.id);
+                onOpenLayerMenuChange(null);
+              }}
+            >
+              {visible ? (
+                <EyeOff aria-hidden="true" size={16} />
+              ) : (
+                <Eye aria-hidden="true" size={16} />
+              )}
+              {visible ? "Hide" : "Show"}
+            </button>
+            <button
+              className="mb-layer-editor__layer-menu-item"
+              disabled={readOnly}
+              role="menuitem"
+              type="button"
+              onClick={() => {
+                controller.toggleLayerLocked(layer.id);
+                onOpenLayerMenuChange(null);
+              }}
+            >
+              {locked ? (
+                <Unlock aria-hidden="true" size={16} />
+              ) : (
+                <Lock aria-hidden="true" size={16} />
+              )}
+              {locked ? "Unlock" : "Lock"}
+            </button>
+          </div>
+        ) : null}
+      </div>
       <button
         aria-label={`Move ${layer.label} up`}
         className="mb-layer-editor__icon-button"

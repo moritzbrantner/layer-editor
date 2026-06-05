@@ -143,6 +143,23 @@
     @apply grid min-w-0 gap-px;
   }
 
+  .mb-layer-editor__layer-options {
+    @apply relative;
+  }
+
+  .mb-layer-editor__layer-menu {
+    @apply absolute top-full right-0 z-20 mt-1 grid min-w-[124px] gap-1 rounded-md border border-[#c7cec6] bg-white p-1 shadow-lg;
+  }
+
+  .mb-layer-editor__layer-menu-item {
+    @apply flex min-h-8 w-full items-center gap-2 rounded px-2 text-left text-[0.84rem] font-bold text-[#263632];
+  }
+
+  .mb-layer-editor__layer-menu-item:not(:disabled):hover,
+  .mb-layer-editor__layer-menu-item:not(:disabled):focus-visible {
+    @apply bg-[#eef3ff] outline-none;
+  }
+
   .mb-layer-editor__layer-label,
   .mb-layer-editor__layer-meta {
     @apply overflow-hidden text-ellipsis whitespace-nowrap;

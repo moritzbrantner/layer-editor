@@ -129,6 +129,42 @@ describe("@moritzbrantner/layer-editor React panel", () => {
     expect(onLayerMenuClick.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ id: "mask" }));
   });
 
+  test("shows visibility and locking actions in the layer menu", () => {
+    const onDocumentChange = vi.fn();
+    render(<LayerEditorPanel document={document} onDocumentChange={onDocumentChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Layer menu Mask" }));
+    expect(screen.getByRole("menu", { name: "Mask options" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide" }));
+    expect(onDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        layers: expect.arrayContaining([expect.objectContaining({ id: "mask", visible: false })]),
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Layer menu Mask" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Lock" }));
+    expect(onDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        layers: expect.arrayContaining([expect.objectContaining({ id: "mask", locked: true })]),
+      }),
+    );
+  });
+
+  test("allows custom layer menu handlers to prevent the built-in menu", () => {
+    render(
+      <LayerEditorPanel
+        document={document}
+        onLayerMenuClick={(_, event) => event.preventDefault()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Layer menu Mask" }));
+
+    expect(screen.queryByRole("menu", { name: "Mask options" })).toBeNull();
+  });
+
   test("read-only panel disables mutation controls", () => {
     const onDocumentChange = vi.fn();
     render(
