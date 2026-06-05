@@ -1,0 +1,21 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "..",
+    "ignoreDeprecations": "6.0",
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "paths": {
+      "@moritzbrantner/layer-editor": ["./src/index.ts"],
+      "@moritzbrantner/layer-editor/core": ["./src/core.ts"],
+      "@moritzbrantner/layer-editor/history": ["./src/history.ts"],
+      "@moritzbrantner/layer-editor/react": ["./src/react.tsx"],
+      "@moritzbrantner/layer-editor/serialization": ["./src/serialization.ts"]
+    },
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "references": []
+}

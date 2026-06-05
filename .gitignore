@@ -1,0 +1,5 @@
+benchmark-results/
+coverage/
+dist/
+dist-examples/
+node_modules/

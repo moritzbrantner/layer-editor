@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@moritzbrantner/layer-editor": ["./src/index.ts"],
+      "@moritzbrantner/layer-editor/core": ["./src/core.ts"],
+      "@moritzbrantner/layer-editor/history": ["./src/history.ts"],
+      "@moritzbrantner/layer-editor/react": ["./src/react.tsx"],
+      "@moritzbrantner/layer-editor/serialization": ["./src/serialization.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "dist/**", "coverage/**"]
+}
