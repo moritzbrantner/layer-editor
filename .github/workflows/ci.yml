@@ -23,6 +23,5 @@ jobs:
       typecheck_command: bun run check-types
       build_command: bun run build
       unit_test_command: bun run test
-      bun_cache_dependency_path: bun.lock
     secrets:
       GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
