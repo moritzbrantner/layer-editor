@@ -17,12 +17,16 @@ import { useEffect, useState, type CSSProperties } from "react";
 
 import {
   LayerEditorPanel,
+  commitLayerEditorHistory,
   createLayerEditorDocument,
+  createLayerEditorHistory,
+  createLayerEditorUniqueId,
   layerEditorBlendModes,
   serializeLayerEditorDocument,
   updateLayerEditorLayer,
   type LayerEditorBlendMode,
   type LayerEditorDocument,
+  type LayerEditorHistoryState,
   type LayerEditorLayer,
   type LayerEditorSelection,
 } from "@moritzbrantner/layer-editor";
@@ -89,6 +93,12 @@ type ExampleDocument = LayerEditorDocument<
 >;
 
 type ExampleDocuments = Record<ExampleKey, ExampleDocument>;
+type ExampleHistory = LayerEditorHistoryState<
+  ExampleLayerData,
+  Record<string, unknown>,
+  ExampleSourceData
+>;
+type ExampleHistories = Record<ExampleKey, ExampleHistory>;
 
 const exampleLabels = {
   geojson: "GeoJSON",
@@ -111,13 +121,61 @@ async function loadExampleDocuments(): Promise<ExampleDocuments> {
   };
 }
 
+function createExampleHistories(documents: ExampleDocuments): ExampleHistories {
+  return {
+    geojson: createLayerEditorHistory(documents.geojson),
+    image: createLayerEditorHistory(documents.image),
+    svg: createLayerEditorHistory(documents.svg),
+  };
+}
+
+function createExampleLayer(
+  example: ExampleKey,
+  existingIds: ReadonlySet<string>,
+): LayerEditorLayer<ExampleLayerData> {
+  if (example === "image") {
+    const id = createLayerEditorUniqueId("overlay", existingIds);
+    return {
+      bounds: { height: 240, width: 360, x: 200, y: 120 },
+      data: { kind: "image-overlay" },
+      id,
+      kind: "image-overlay",
+      label: "Overlay",
+      opacity: 0.4,
+      style: { fill: "#3159a5" },
+    };
+  }
+
+  if (example === "svg") {
+    const id = createLayerEditorUniqueId("rect", existingIds);
+    return {
+      bounds: { height: 120, width: 220, x: 270, y: 180 },
+      data: { kind: "svg-shape", shape: "rect" },
+      id,
+      kind: "svg-rect",
+      label: "Rectangle",
+      opacity: 1,
+      style: { fill: "#87b1aa", stroke: "#273632", strokeWidth: 4 },
+    };
+  }
+
+  const id = createLayerEditorUniqueId("layer", existingIds);
+  return {
+    data: { kind: "geojson", symbol: "area" },
+    id,
+    kind: "geojson",
+    label: "Layer",
+    opacity: 1,
+  };
+}
+
 export function App() {
   const examplesQuery = useQuery({
     queryFn: loadExampleDocuments,
     queryKey: ["layer-editor", "examples"],
   });
   const [activeExample, setActiveExample] = useState<ExampleKey>("geojson");
-  const [documents, setDocuments] = useState<ExampleDocuments | null>(null);
+  const [histories, setHistories] = useState<ExampleHistories | null>(null);
   const [selections, setSelections] = useState<Record<ExampleKey, LayerEditorSelection>>({
     geojson: { layerIds: ["route"], primaryLayerId: "route" },
     image: { layerIds: ["caption"], primaryLayerId: "caption" },
@@ -125,10 +183,10 @@ export function App() {
   });
 
   useEffect(() => {
-    if (examplesQuery.data && !documents) {
-      setDocuments(examplesQuery.data);
+    if (examplesQuery.data && !histories) {
+      setHistories(createExampleHistories(examplesQuery.data));
     }
-  }, [documents, examplesQuery.data]);
+  }, [examplesQuery.data, histories]);
 
   if (examplesQuery.isError) {
     return (
@@ -139,22 +197,36 @@ export function App() {
     );
   }
 
-  if (!documents) {
+  if (!histories) {
     return <ShellMessage title="Loading examples" />;
   }
 
-  const document = documents[activeExample];
+  const history = histories[activeExample];
+  const document = history.present;
   const selection = selections[activeExample] ?? initialSelection;
   const selectedLayer =
     document.layers.find((layer) => layer.id === selection.primaryLayerId) ?? null;
   const setActiveDocument = (nextDocument: ExampleDocument) => {
-    setDocuments((currentDocuments) =>
-      currentDocuments
+    setHistories((currentHistories) =>
+      currentHistories
         ? {
-            ...currentDocuments,
-            [activeExample]: nextDocument,
+            ...currentHistories,
+            [activeExample]: commitLayerEditorHistory(
+              currentHistories[activeExample],
+              nextDocument,
+            ),
           }
-        : currentDocuments,
+        : currentHistories,
+    );
+  };
+  const setActiveHistory = (nextHistory: ExampleHistory) => {
+    setHistories((currentHistories) =>
+      currentHistories
+        ? {
+            ...currentHistories,
+            [activeExample]: nextHistory,
+          }
+        : currentHistories,
     );
   };
 
@@ -200,12 +272,13 @@ export function App() {
           <Card>
             <CardContent className="grid gap-4 p-3.5">
               <LayerEditorPanel
+                createLayer={({ existingIds }) => createExampleLayer(activeExample, existingIds)}
                 document={document}
+                features={{ historyControls: true }}
+                history={history}
                 renderLayerMeta={renderLayerMeta}
                 selection={selection}
-                onDocumentChange={(nextDocument) =>
-                  setActiveDocument(nextDocument as ExampleDocument)
-                }
+                onHistoryChange={(nextHistory) => setActiveHistory(nextHistory as ExampleHistory)}
                 onSelectionChange={(nextSelection) =>
                   setSelections((currentSelections) => ({
                     ...currentSelections,

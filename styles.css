@@ -3,6 +3,20 @@
   gap: 0.375rem;
 }
 
+.mb-layer-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.375rem;
+}
+
+.mb-layer-editor__toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .mb-layer-editor__group {
   display: grid;
   gap: 0.375rem;
@@ -11,7 +25,7 @@
 .mb-layer-editor__group-header {
   display: grid;
   min-height: 2.5rem;
-  grid-template-columns: 2rem minmax(0, 1fr);
+  grid-template-columns: 2rem minmax(0, 1fr) 2rem;
   align-items: center;
   gap: 0.375rem;
   border-radius: var(--ui-radius-control, 0.5rem);
@@ -33,6 +47,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mb-layer-editor__group-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .mb-layer-editor__group-layers {
@@ -113,6 +132,19 @@
 .mb-layer-editor__layer-meta {
   color: var(--muted-foreground, #64706b);
   font-size: 0.78rem;
+}
+
+.mb-layer-editor__menu-danger {
+  color: var(--destructive, #b42318);
+}
+
+.mb-layer-editor__empty {
+  margin: 0;
+  border: 1px dashed var(--border, #d7ded8);
+  border-radius: var(--ui-radius-control, 0.5rem);
+  color: var(--muted-foreground, #64706b);
+  padding: 0.75rem;
+  text-align: center;
 }
 
 @media (max-width: 560px) {

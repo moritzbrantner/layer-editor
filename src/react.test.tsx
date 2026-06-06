@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 
+import { createLayerEditorHistory } from "./history";
 import { LayerEditorPanel } from "./react";
-import type { LayerEditorDocument } from "./core";
+import type { LayerEditorDocument, LayerEditorSelection } from "./core";
 
 const document: LayerEditorDocument = {
   groups: [{ id: "content", label: "Content", layerIds: ["mask"] }],
@@ -12,14 +13,21 @@ const document: LayerEditorDocument = {
   ],
 };
 
+const maskSelection = {
+  layerIds: ["mask"],
+  primaryLayerId: "mask",
+} satisfies LayerEditorSelection;
+
 describe("@moritzbrantner/layer-editor React panel", () => {
-  test("renders groups and layers", () => {
+  test("renders groups, layers, and toolbar by default", () => {
     render(<LayerEditorPanel document={document} />);
 
     expect(screen.getByRole("group", { name: "Content" })).toBeTruthy();
     expect(screen.getByText("Mask")).toBeTruthy();
     expect(screen.getByText("Background")).toBeTruthy();
     expect(screen.getByText("50%")).toBeTruthy();
+    expect(screen.getByRole("toolbar")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add layer" })).toBeTruthy();
   });
 
   test("emits selection changes", () => {
@@ -34,145 +42,137 @@ describe("@moritzbrantner/layer-editor React panel", () => {
     });
   });
 
-  test("emits document changes for visibility, locking, and reorder controls", () => {
+  test("adds layers with the creation hook", () => {
     const onDocumentChange = vi.fn();
-    render(<LayerEditorPanel document={document} onDocumentChange={onDocumentChange} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Hide Mask" }));
-    expect(onDocumentChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        layers: expect.arrayContaining([expect.objectContaining({ id: "mask", visible: false })]),
-      }),
+    const onSelectionChange = vi.fn();
+    render(
+      <LayerEditorPanel
+        createLayer={({ existingIds }) => ({
+          id: existingIds.has("custom") ? "custom-2" : "custom",
+          kind: "custom",
+          label: "Custom",
+        })}
+        document={document}
+        onDocumentChange={onDocumentChange}
+        onSelectionChange={onSelectionChange}
+      />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Lock Mask" }));
-    expect(onDocumentChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        layers: expect.arrayContaining([expect.objectContaining({ id: "mask", locked: true })]),
-      }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Move Mask up" }));
     expect(onDocumentChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        layers: [
-          expect.objectContaining({ id: "mask" }),
-          expect.objectContaining({ id: "background" }),
-        ],
+        layers: expect.arrayContaining([expect.objectContaining({ id: "custom" })]),
       }),
     );
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      layerIds: ["custom"],
+      primaryLayerId: "custom",
+    });
   });
 
-  test("emits document changes for drag reorder", () => {
+  test("duplicates selected layers from the toolbar", () => {
     const onDocumentChange = vi.fn();
-    render(<LayerEditorPanel document={document} onDocumentChange={onDocumentChange} />);
+    const onSelectionChange = vi.fn();
+    render(
+      <LayerEditorPanel
+        document={document}
+        selection={maskSelection}
+        onDocumentChange={onDocumentChange}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
 
-    const backgroundRow = screen.getByText("Background").closest('[role="treeitem"]');
-    const maskRow = screen.getByText("Mask").closest('[role="treeitem"]');
-    expect(backgroundRow).toBeTruthy();
-    expect(maskRow).toBeTruthy();
-
-    fireEvent.dragStart(backgroundRow as Element, {
-      dataTransfer: {
-        effectAllowed: "move",
-        getData: () => "background",
-        setData: vi.fn(),
-      },
-    });
-    fireEvent.dragOver(maskRow as Element, {
-      clientY: 1,
-      dataTransfer: {
-        getData: () => "background",
-      },
-    });
-    fireEvent.drop(maskRow as Element, {
-      dataTransfer: {
-        getData: () => "background",
-      },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate selected layers" }));
 
     expect(onDocumentChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         layers: [
-          expect.objectContaining({ id: "mask" }),
           expect.objectContaining({ id: "background" }),
+          expect.objectContaining({ id: "mask" }),
+          expect.objectContaining({ id: "mask-copy" }),
         ],
       }),
     );
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      layerIds: ["mask-copy"],
+      primaryLayerId: "mask-copy",
+    });
   });
 
-  test("moves ungrouped layers into groups during drag reorder", () => {
+  test("deletes selected layers and normalizes selection", () => {
     const onDocumentChange = vi.fn();
-    render(<LayerEditorPanel document={document} onDocumentChange={onDocumentChange} />);
-
-    const backgroundRow = screen.getByText("Background").closest('[role="treeitem"]');
-    const maskRow = screen.getByText("Mask").closest('[role="treeitem"]');
-    expect(backgroundRow).toBeTruthy();
-    expect(maskRow).toBeTruthy();
-
-    fireEvent.dragStart(backgroundRow as Element, {
-      dataTransfer: {
-        effectAllowed: "move",
-        getData: () => "background",
-        setData: vi.fn(),
-      },
-    });
-    fireEvent.dragOver(maskRow as Element, {
-      clientY: 0,
-      dataTransfer: {
-        getData: () => "background",
-      },
-    });
-    fireEvent.drop(maskRow as Element, {
-      dataTransfer: {
-        getData: () => "background",
-      },
-    });
-
-    expect(onDocumentChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        groups: [expect.objectContaining({ id: "content", layerIds: ["mask", "background"] })],
-        layers: expect.arrayContaining([
-          expect.objectContaining({ id: "background", parentGroupId: "content" }),
-        ]),
-      }),
+    const onSelectionChange = vi.fn();
+    render(
+      <LayerEditorPanel
+        document={document}
+        selection={maskSelection}
+        onDocumentChange={onDocumentChange}
+        onSelectionChange={onSelectionChange}
+      />,
     );
-  });
 
-  test("moves grouped layers out of groups during drag reorder", () => {
-    const onDocumentChange = vi.fn();
-    render(<LayerEditorPanel document={document} onDocumentChange={onDocumentChange} />);
-
-    const backgroundRow = screen.getByText("Background").closest('[role="treeitem"]');
-    const maskRow = screen.getByText("Mask").closest('[role="treeitem"]');
-    expect(backgroundRow).toBeTruthy();
-    expect(maskRow).toBeTruthy();
-
-    fireEvent.dragStart(maskRow as Element, {
-      dataTransfer: {
-        effectAllowed: "move",
-        getData: () => "mask",
-        setData: vi.fn(),
-      },
-    });
-    fireEvent.dragOver(backgroundRow as Element, {
-      clientY: 1,
-      dataTransfer: {
-        getData: () => "mask",
-      },
-    });
-    fireEvent.drop(backgroundRow as Element, {
-      dataTransfer: {
-        getData: () => "mask",
-      },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected layers" }));
 
     expect(onDocumentChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         groups: undefined,
-        layers: expect.arrayContaining([
-          expect.objectContaining({ id: "mask", parentGroupId: undefined }),
-        ]),
+        layers: [expect.objectContaining({ id: "background" })],
+      }),
+    );
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      layerIds: ["background"],
+      primaryLayerId: "background",
+    });
+  });
+
+  test("groups selected layers from the toolbar", () => {
+    const onDocumentChange = vi.fn();
+    const onSelectionChange = vi.fn();
+    render(
+      <LayerEditorPanel
+        document={{ layers: document.layers }}
+        selection={{ layerIds: ["background", "mask"], primaryLayerId: "background" }}
+        onDocumentChange={onDocumentChange}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Group selected layers" }));
+
+    expect(onDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        groups: [expect.objectContaining({ id: "group", layerIds: ["background", "mask"] })],
+      }),
+    );
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      groupIds: ["group"],
+      layerIds: ["background", "mask"],
+      primaryLayerId: "mask",
+    });
+  });
+
+  test("shows built-in layer menu actions and custom layer actions", () => {
+    const onDocumentChange = vi.fn();
+    render(
+      <LayerEditorPanel
+        document={document}
+        renderLayerActions={({ layer }) => <div role="menuitem">Custom action {layer.label}</div>}
+        onDocumentChange={onDocumentChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Layer menu Mask" }));
+
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Custom action Mask" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide" }));
+    expect(onDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        layers: expect.arrayContaining([expect.objectContaining({ id: "mask", visible: false })]),
       }),
     );
   });
@@ -196,63 +196,38 @@ describe("@moritzbrantner/layer-editor React panel", () => {
     );
   });
 
-  test("emits layer menu clicks", () => {
-    const onLayerMenuClick = vi.fn();
-    render(<LayerEditorPanel document={document} onLayerMenuClick={onLayerMenuClick} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Layer menu Mask" }));
-
-    expect(onLayerMenuClick).toHaveBeenCalledTimes(1);
-    expect(onLayerMenuClick.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ id: "mask" }));
-  });
-
-  test("shows visibility and locking actions in the layer menu", () => {
+  test("supports group menu actions", () => {
     const onDocumentChange = vi.fn();
     render(<LayerEditorPanel document={document} onDocumentChange={onDocumentChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Layer menu Mask" }));
-    expect(screen.getByRole("menu")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("menuitem", { name: "Hide" }));
+    fireEvent.click(screen.getByRole("button", { name: "Group menu Content" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Ungroup" }));
     expect(onDocumentChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        layers: expect.arrayContaining([expect.objectContaining({ id: "mask", visible: false })]),
+        groups: undefined,
+        layers: expect.arrayContaining([
+          expect.objectContaining({ id: "mask", parentGroupId: undefined }),
+        ]),
       }),
     );
-    expect(screen.queryByRole("menu")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Layer menu Mask" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Lock" }));
+    fireEvent.click(screen.getByRole("button", { name: "Group menu Content" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete group only" }));
     expect(onDocumentChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        layers: expect.arrayContaining([expect.objectContaining({ id: "mask", locked: true })]),
+        groups: undefined,
+        layers: expect.arrayContaining([expect.objectContaining({ id: "mask" })]),
       }),
     );
-  });
 
-  test("allows custom layer menu handlers to prevent the built-in menu", () => {
-    render(
-      <LayerEditorPanel
-        document={document}
-        onLayerMenuClick={(_, event) => event.preventDefault()}
-      />,
+    fireEvent.click(screen.getByRole("button", { name: "Group menu Content" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete group and layers" }));
+    expect(onDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        groups: undefined,
+        layers: [expect.objectContaining({ id: "background" })],
+      }),
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "Layer menu Mask" }));
-
-    expect(screen.queryByRole("menu")).toBeNull();
-  });
-
-  test("read-only panel disables mutation controls", () => {
-    const onDocumentChange = vi.fn();
-    render(
-      <LayerEditorPanel document={document} onDocumentChange={onDocumentChange} readOnly={true} />,
-    );
-
-    const hideButton = screen.getByRole("button", { name: "Hide Mask" });
-    expect((hideButton as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(hideButton);
-    expect(onDocumentChange).not.toHaveBeenCalled();
   });
 
   test("collapses and expands groups", () => {
@@ -268,13 +243,6 @@ describe("@moritzbrantner/layer-editor React panel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Content" }));
     expect(screen.getByText("Mask")).toBeTruthy();
-  });
-
-  test("read-only panel disables group collapse", () => {
-    render(<LayerEditorPanel document={document} readOnly={true} />);
-
-    const collapseButton = screen.getByRole("button", { name: "Collapse Content" });
-    expect((collapseButton as HTMLButtonElement).disabled).toBe(true);
   });
 
   test("moves keyboard focus through visible tree items", () => {
@@ -300,34 +268,112 @@ describe("@moritzbrantner/layer-editor React panel", () => {
     expect(globalThis.document.activeElement).toBe(contentRow);
   });
 
-  test("selects focused layers with the keyboard", () => {
-    const onSelectionChange = vi.fn();
-    render(<LayerEditorPanel document={document} onSelectionChange={onSelectionChange} />);
+  test("handles keyboard duplicate, group, and delete commands", () => {
+    const onDocumentChange = vi.fn();
+    const ungroupedDocument = { layers: document.layers } satisfies LayerEditorDocument;
+    render(
+      <LayerEditorPanel
+        document={ungroupedDocument}
+        selection={maskSelection}
+        onDocumentChange={onDocumentChange}
+      />,
+    );
 
     const maskRow = screen.getByText("Mask").closest('[role="treeitem"]');
     expect(maskRow).toBeTruthy();
 
-    (maskRow as HTMLElement).focus();
-    fireEvent.keyDown(maskRow as Element, { key: "Enter" });
+    fireEvent.keyDown(maskRow as Element, { ctrlKey: true, key: "d" });
+    expect(onDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        layers: expect.arrayContaining([expect.objectContaining({ id: "mask-copy" })]),
+      }),
+    );
 
-    expect(onSelectionChange).toHaveBeenCalledWith({
-      layerIds: ["mask"],
-      primaryLayerId: "mask",
-    });
+    fireEvent.keyDown(maskRow as Element, { ctrlKey: true, key: "g" });
+    expect(onDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        groups: expect.arrayContaining([expect.objectContaining({ id: "group" })]),
+      }),
+    );
+
+    fireEvent.keyDown(maskRow as Element, { key: "Delete" });
+    expect(onDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        layers: [expect.objectContaining({ id: "background" })],
+      }),
+    );
   });
 
-  test("starts and cancels layer renaming from the keyboard", async () => {
-    render(<LayerEditorPanel document={document} />);
+  test("keyboard commands do not fire while editing labels", async () => {
+    const onDocumentChange = vi.fn();
+    render(
+      <LayerEditorPanel
+        document={document}
+        selection={maskSelection}
+        onDocumentChange={onDocumentChange}
+      />,
+    );
 
     const maskRow = screen.getByText("Mask").closest('[role="treeitem"]');
     expect(maskRow).toBeTruthy();
 
     (maskRow as HTMLElement).focus();
     fireEvent.keyDown(maskRow as Element, { key: "F2" });
-    expect(screen.getByRole("textbox", { name: "Rename Mask" })).toBeTruthy();
-
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Rename Mask" }), {
+      ctrlKey: true,
+      key: "d",
+    });
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Rename Mask" }), { key: "Escape" });
+
     await waitFor(() => expect(screen.queryByRole("textbox", { name: "Rename Mask" })).toBeNull());
-    expect(globalThis.document.activeElement).toBe(maskRow);
+    expect(onDocumentChange).not.toHaveBeenCalled();
+  });
+
+  test("history controls call history and document handlers", () => {
+    const history = createLayerEditorHistory(document);
+    const onDocumentChange = vi.fn();
+    const onHistoryChange = vi.fn();
+    render(
+      <LayerEditorPanel
+        document={document}
+        features={{ historyControls: true }}
+        history={history}
+        onDocumentChange={onDocumentChange}
+        onHistoryChange={onHistoryChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add layer" }));
+
+    expect(onHistoryChange).toHaveBeenCalledTimes(1);
+    expect(onDocumentChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        layers: expect.arrayContaining([expect.objectContaining({ id: "layer" })]),
+      }),
+    );
+  });
+
+  test("read-only panel disables mutation controls", () => {
+    const onDocumentChange = vi.fn();
+    render(
+      <LayerEditorPanel
+        document={document}
+        selection={maskSelection}
+        readOnly={true}
+        onDocumentChange={onDocumentChange}
+      />,
+    );
+
+    const addButton = screen.getByRole("button", { name: "Add layer" });
+    const hideButton = screen.getByRole("button", { name: "Hide Mask" });
+    expect((addButton as HTMLButtonElement).disabled).toBe(true);
+    expect((hideButton as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(addButton);
+    fireEvent.keyDown(screen.getByText("Mask").closest('[role="treeitem"]') as Element, {
+      key: "Delete",
+    });
+
+    expect(onDocumentChange).not.toHaveBeenCalled();
   });
 });

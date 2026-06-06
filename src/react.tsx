@@ -18,12 +18,20 @@ import {
 import {
   ChevronDown,
   ChevronUp,
+  Copy,
   Eye,
   EyeOff,
+  FolderMinus,
+  FolderPlus,
   Layers,
   Lock,
   MoreHorizontal,
+  Pencil,
+  Plus,
+  Redo2,
+  Trash2,
   Unlock,
+  Undo2,
 } from "lucide-react";
 import {
   useCallback,
@@ -38,11 +46,18 @@ import {
 } from "react";
 
 import {
+  addLayerEditorLayer,
+  createLayerEditorUniqueId,
+  duplicateLayerEditorLayers,
+  groupLayerEditorLayers,
   moveLayerEditorLayer,
   moveLayerEditorLayerRelativeTo,
   normalizeLayerEditorSelection,
+  removeLayerEditorGroup,
+  removeLayerEditorLayers,
   setLayerEditorLayerLocked,
   setLayerEditorLayerVisibility,
+  ungroupLayerEditorGroup,
   updateLayerEditorGroup,
   updateLayerEditorLayer,
   type LayerEditorDocument,
@@ -51,6 +66,14 @@ import {
   type LayerEditorLayerDropPosition,
   type LayerEditorSelection,
 } from "./core";
+import {
+  canRedoLayerEditorHistory,
+  canUndoLayerEditorHistory,
+  commitLayerEditorHistory,
+  redoLayerEditorHistory,
+  undoLayerEditorHistory,
+  type LayerEditorHistoryState,
+} from "./history";
 
 type LayerEditorTreeItem =
   | { id: string; kind: "group"; key: string }
@@ -64,49 +87,213 @@ type LayerEditorTreeItemKeyboardContext = {
   layer?: { id: string };
 };
 
-export type LayerEditorPanelProps<TLayerData = Record<string, unknown>> = {
+export type LayerEditorPanelFeatures = {
+  groupMenus?: boolean;
+  historyControls?: boolean;
+  keyboardCommands?: boolean;
+  layerMenus?: boolean;
+  toolbar?: boolean;
+};
+
+export type LayerEditorCreateLayerContext<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = {
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
+  existingIds: ReadonlySet<string>;
+  selection: LayerEditorSelection;
+};
+
+export type LayerEditorCreateGroupContext<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = {
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
+  existingIds: ReadonlySet<string>;
+  selection: LayerEditorSelection;
+};
+
+export type LayerEditorLayerActionContext<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = {
+  controller: LayerEditorController<TLayerData, TGroupData, TSourceData>;
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
+  layer: LayerEditorLayer<TLayerData>;
+  selection: LayerEditorSelection;
+};
+
+export type LayerEditorGroupActionContext<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = {
+  controller: LayerEditorController<TLayerData, TGroupData, TSourceData>;
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
+  group: LayerEditorGroup<TGroupData>;
+  selection: LayerEditorSelection;
+};
+
+export type LayerEditorPanelProps<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = {
   className?: string;
-  document: LayerEditorDocument<TLayerData>;
+  createGroup?: (
+    context: LayerEditorCreateGroupContext<TLayerData, TGroupData, TSourceData>,
+  ) => LayerEditorGroup<TGroupData>;
+  createLayer?: (
+    context: LayerEditorCreateLayerContext<TLayerData, TGroupData, TSourceData>,
+  ) => LayerEditorLayer<TLayerData>;
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
+  features?: LayerEditorPanelFeatures;
+  history?: LayerEditorHistoryState<TLayerData, TGroupData, TSourceData>;
+  historyLimit?: number;
   selection?: LayerEditorSelection;
   readOnly?: boolean;
-  onLayerMenuClick?: (
-    layer: LayerEditorLayer<TLayerData>,
-    event: MouseEvent<HTMLButtonElement>,
-  ) => void;
+  renderGroupActions?: (
+    context: LayerEditorGroupActionContext<TLayerData, TGroupData, TSourceData>,
+  ) => ReactNode;
+  renderLayerActions?: (
+    context: LayerEditorLayerActionContext<TLayerData, TGroupData, TSourceData>,
+  ) => ReactNode;
   renderLayerLabel?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
   renderLayerMeta?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
-  onDocumentChange?: (document: LayerEditorDocument<TLayerData>) => void;
+  onDocumentChange?: (document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>) => void;
+  onHistoryChange?: (history: LayerEditorHistoryState<TLayerData, TGroupData, TSourceData>) => void;
   onSelectionChange?: (selection: LayerEditorSelection) => void;
 };
 
-export type LayerEditorController<TLayerData = Record<string, unknown>> = {
-  document: LayerEditorDocument<TLayerData>;
+export type LayerEditorController<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = {
+  canRedo: boolean;
+  canUndo: boolean;
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
+  readOnly: boolean;
   selection: LayerEditorSelection;
+  addGroup: (group?: LayerEditorGroup<TGroupData>) => void;
+  addLayer: (layer?: LayerEditorLayer<TLayerData>) => void;
+  clearSelection: () => void;
+  commitDocument: (
+    document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+    selection?: LayerEditorSelection,
+  ) => void;
+  duplicateLayers: (layerIds: readonly string[]) => void;
+  duplicateSelectedLayers: () => void;
+  groupSelectedLayers: () => void;
   moveLayer: (layerId: string, direction: "down" | "up") => void;
   moveLayerRelativeTo: (
     layerId: string,
     targetLayerId: string,
     position: LayerEditorLayerDropPosition,
   ) => void;
+  redo: () => void;
+  removeGroup: (groupId: string, options?: { removeLayers?: boolean }) => void;
+  removeLayers: (layerIds: readonly string[]) => void;
+  removeSelectedLayers: () => void;
+  renameGroup: (groupId: string, label: string) => void;
   renameLayer: (layerId: string, label: string) => void;
   selectLayer: (layerId: string, additive?: boolean) => void;
+  selectLayers: (layerIds: readonly string[], primaryLayerId?: string | null) => void;
+  toggleGroupLocked: (groupId: string) => void;
   toggleGroupCollapsed: (groupId: string) => void;
+  toggleGroupVisibility: (groupId: string) => void;
   toggleLayerLocked: (layerId: string) => void;
   toggleLayerVisibility: (layerId: string) => void;
+  undo: () => void;
+  ungroupGroup: (groupId: string) => void;
 };
 
-export function useLayerEditorController<TLayerData = Record<string, unknown>>({
+export function useLayerEditorController<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>({
+  createGroup,
+  createLayer,
   document,
+  history,
+  historyLimit,
+  onHistoryChange,
+  readOnly = false,
   selection,
   onDocumentChange,
   onSelectionChange,
 }: Pick<
-  LayerEditorPanelProps<TLayerData>,
-  "document" | "onDocumentChange" | "onSelectionChange" | "selection"
->): LayerEditorController<TLayerData> {
+  LayerEditorPanelProps<TLayerData, TGroupData, TSourceData>,
+  | "createGroup"
+  | "createLayer"
+  | "document"
+  | "history"
+  | "historyLimit"
+  | "onDocumentChange"
+  | "onHistoryChange"
+  | "onSelectionChange"
+  | "readOnly"
+  | "selection"
+>): LayerEditorController<TLayerData, TGroupData, TSourceData> {
   const resolvedSelection = normalizeLayerEditorSelection(
     document,
     selection ?? { layerIds: [], primaryLayerId: null },
+  );
+  const canUndo = history ? canUndoLayerEditorHistory(history) : false;
+  const canRedo = history ? canRedoLayerEditorHistory(history) : false;
+
+  const emitSelection = useCallback(
+    (
+      nextDocument: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+      nextSelection: LayerEditorSelection,
+    ) => {
+      onSelectionChange?.(normalizeLayerEditorSelection(nextDocument, nextSelection));
+    },
+    [onSelectionChange],
+  );
+
+  const commitDocument = useCallback(
+    (
+      nextDocument: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+      nextSelection = resolvedSelection,
+    ) => {
+      if (readOnly) {
+        return;
+      }
+
+      if (history && onHistoryChange) {
+        const nextHistory = commitLayerEditorHistory(history, nextDocument, {
+          limit: historyLimit,
+        });
+        onHistoryChange(nextHistory);
+        onDocumentChange?.(nextHistory.present);
+        emitSelection(nextHistory.present, nextSelection);
+        return;
+      }
+
+      onDocumentChange?.(nextDocument);
+      emitSelection(nextDocument, nextSelection);
+    },
+    [
+      emitSelection,
+      history,
+      historyLimit,
+      onDocumentChange,
+      onHistoryChange,
+      readOnly,
+      resolvedSelection,
+    ],
+  );
+
+  const selectLayers = useCallback(
+    (layerIds: readonly string[], primaryLayerId: string | null = layerIds[0] ?? null) => {
+      emitSelection(document, { layerIds: [...layerIds], primaryLayerId });
+    },
+    [document, emitSelection],
   );
 
   const selectLayer = useCallback(
@@ -119,14 +306,156 @@ export function useLayerEditorController<TLayerData = Record<string, unknown>>({
             ? [...resolvedSelection.layerIds, layerId]
             : [layerId];
 
-      onSelectionChange?.(
-        normalizeLayerEditorSelection(document, {
-          layerIds: nextLayerIds,
-          primaryLayerId: nextLayerIds.includes(layerId) ? layerId : (nextLayerIds[0] ?? null),
-        }),
+      selectLayers(
+        nextLayerIds,
+        nextLayerIds.includes(layerId) ? layerId : (nextLayerIds[0] ?? null),
       );
     },
-    [document, onSelectionChange, resolvedSelection.layerIds],
+    [resolvedSelection.layerIds, selectLayers],
+  );
+
+  const clearSelection = useCallback(() => {
+    emitSelection(document, { layerIds: [], primaryLayerId: null });
+  }, [document, emitSelection]);
+
+  const addLayer = useCallback(
+    (layer?: LayerEditorLayer<TLayerData>) => {
+      if (readOnly) {
+        return;
+      }
+
+      const existingIds = new Set(document.layers.map((item) => item.id));
+      const nextLayer =
+        layer ??
+        createLayer?.({ document, existingIds, selection: resolvedSelection }) ??
+        ({
+          id: createLayerEditorUniqueId("layer", existingIds),
+          kind: "layer",
+          label: "Layer",
+        } as LayerEditorLayer<TLayerData>);
+
+      commitDocument(addLayerEditorLayer(document, nextLayer), {
+        layerIds: [nextLayer.id],
+        primaryLayerId: nextLayer.id,
+      });
+    },
+    [commitDocument, createLayer, document, readOnly, resolvedSelection],
+  );
+
+  const duplicateLayers = useCallback(
+    (layerIds: readonly string[]) => {
+      if (readOnly || layerIds.length === 0) {
+        return;
+      }
+
+      const copiedLayerIds: string[] = [];
+      const nextDocument = duplicateLayerEditorLayers(document, layerIds, {
+        createId: (layerId, existingIds) => {
+          const copiedLayerId = createLayerEditorUniqueId(`${layerId}-copy`, existingIds);
+          copiedLayerIds.push(copiedLayerId);
+          return copiedLayerId;
+        },
+      });
+
+      commitDocument(nextDocument, {
+        layerIds: copiedLayerIds,
+        primaryLayerId: copiedLayerIds[0] ?? null,
+      });
+    },
+    [commitDocument, document, readOnly],
+  );
+
+  const duplicateSelectedLayers = useCallback(() => {
+    duplicateLayers(resolvedSelection.layerIds);
+  }, [duplicateLayers, resolvedSelection.layerIds]);
+
+  const removeLayers = useCallback(
+    (layerIds: readonly string[]) => {
+      if (readOnly || layerIds.length === 0) {
+        return;
+      }
+
+      const nextDocument = removeLayerEditorLayers(document, layerIds);
+      commitDocument(
+        nextDocument,
+        nearestSurvivingLayerSelection(document, nextDocument, layerIds),
+      );
+    },
+    [commitDocument, document, readOnly],
+  );
+
+  const removeSelectedLayers = useCallback(() => {
+    removeLayers(resolvedSelection.layerIds);
+  }, [removeLayers, resolvedSelection.layerIds]);
+
+  const addGroup = useCallback(
+    (group?: LayerEditorGroup<TGroupData>) => {
+      if (readOnly) {
+        return;
+      }
+
+      const existingIds = new Set(document.groups?.map((item) => item.id) ?? []);
+      const nextGroup =
+        group ??
+        createGroup?.({ document, existingIds, selection: resolvedSelection }) ??
+        ({
+          id: createLayerEditorUniqueId("group", existingIds),
+          label: "Group",
+          layerIds: resolvedSelection.layerIds,
+        } as LayerEditorGroup<TGroupData>);
+      const nextDocument = groupLayerEditorLayers(document, nextGroup);
+
+      commitDocument(nextDocument, {
+        ...resolvedSelection,
+        groupIds: [nextGroup.id],
+      });
+    },
+    [commitDocument, createGroup, document, readOnly, resolvedSelection],
+  );
+
+  const groupSelectedLayers = useCallback(() => {
+    if (resolvedSelection.layerIds.length === 0) {
+      return;
+    }
+
+    addGroup();
+  }, [addGroup, resolvedSelection.layerIds.length]);
+
+  const removeGroup = useCallback(
+    (groupId: string, options: { removeLayers?: boolean } = {}) => {
+      if (readOnly) {
+        return;
+      }
+
+      const group = document.groups?.find((item) => item.id === groupId);
+      const nextDocument = removeLayerEditorGroup(document, groupId, options);
+      const nextLayerIds = options.removeLayers
+        ? resolvedSelection.layerIds.filter((layerId) => !group?.layerIds.includes(layerId))
+        : resolvedSelection.layerIds;
+
+      commitDocument(nextDocument, {
+        layerIds: nextLayerIds,
+        groupIds: resolvedSelection.groupIds?.filter((id) => id !== groupId),
+        primaryLayerId: nextLayerIds.includes(resolvedSelection.primaryLayerId ?? "")
+          ? resolvedSelection.primaryLayerId
+          : (nextLayerIds[0] ?? null),
+      });
+    },
+    [commitDocument, document, readOnly, resolvedSelection],
+  );
+
+  const ungroupGroup = useCallback(
+    (groupId: string) => {
+      if (readOnly) {
+        return;
+      }
+
+      commitDocument(ungroupLayerEditorGroup(document, groupId), {
+        ...resolvedSelection,
+        groupIds: resolvedSelection.groupIds?.filter((id) => id !== groupId),
+      });
+    },
+    [commitDocument, document, readOnly, resolvedSelection],
   );
 
   const toggleLayerVisibility = useCallback(
@@ -136,11 +465,9 @@ export function useLayerEditorController<TLayerData = Record<string, unknown>>({
         return;
       }
 
-      onDocumentChange?.(
-        setLayerEditorLayerVisibility(document, layerId, !(layer.visible ?? true)),
-      );
+      commitDocument(setLayerEditorLayerVisibility(document, layerId, !(layer.visible ?? true)));
     },
-    [document, onDocumentChange],
+    [commitDocument, document],
   );
 
   const toggleLayerLocked = useCallback(
@@ -150,9 +477,9 @@ export function useLayerEditorController<TLayerData = Record<string, unknown>>({
         return;
       }
 
-      onDocumentChange?.(setLayerEditorLayerLocked(document, layerId, !(layer.locked ?? false)));
+      commitDocument(setLayerEditorLayerLocked(document, layerId, !(layer.locked ?? false)));
     },
-    [document, onDocumentChange],
+    [commitDocument, document],
   );
 
   const toggleGroupCollapsed = useCallback(
@@ -162,11 +489,37 @@ export function useLayerEditorController<TLayerData = Record<string, unknown>>({
         return;
       }
 
-      onDocumentChange?.(
-        updateLayerEditorGroup(document, groupId, { collapsed: !group.collapsed }),
+      commitDocument(updateLayerEditorGroup(document, groupId, { collapsed: !group.collapsed }));
+    },
+    [commitDocument, document],
+  );
+
+  const toggleGroupVisibility = useCallback(
+    (groupId: string) => {
+      const group = document.groups?.find((item) => item.id === groupId);
+      if (!group) {
+        return;
+      }
+
+      commitDocument(
+        updateLayerEditorGroup(document, groupId, { visible: !(group.visible ?? true) }),
       );
     },
-    [document, onDocumentChange],
+    [commitDocument, document],
+  );
+
+  const toggleGroupLocked = useCallback(
+    (groupId: string) => {
+      const group = document.groups?.find((item) => item.id === groupId);
+      if (!group) {
+        return;
+      }
+
+      commitDocument(
+        updateLayerEditorGroup(document, groupId, { locked: !(group.locked ?? false) }),
+      );
+    },
+    [commitDocument, document],
   );
 
   const moveLayer = useCallback(
@@ -177,18 +530,16 @@ export function useLayerEditorController<TLayerData = Record<string, unknown>>({
       }
 
       const targetIndex = direction === "up" ? index - 1 : index + 1;
-      onDocumentChange?.(moveLayerEditorLayer(document, layerId, targetIndex));
+      commitDocument(moveLayerEditorLayer(document, layerId, targetIndex));
     },
-    [document, onDocumentChange],
+    [commitDocument, document],
   );
 
   const moveLayerRelativeTo = useCallback(
     (layerId: string, targetLayerId: string, position: LayerEditorLayerDropPosition) => {
-      onDocumentChange?.(
-        moveLayerEditorLayerRelativeTo(document, layerId, targetLayerId, position),
-      );
+      commitDocument(moveLayerEditorLayerRelativeTo(document, layerId, targetLayerId, position));
     },
-    [document, onDocumentChange],
+    [commitDocument, document],
   );
 
   const renameLayer = useCallback(
@@ -198,39 +549,202 @@ export function useLayerEditorController<TLayerData = Record<string, unknown>>({
         return;
       }
 
-      onDocumentChange?.(updateLayerEditorLayer(document, layerId, { label: nextLabel }));
+      commitDocument(updateLayerEditorLayer(document, layerId, { label: nextLabel }));
     },
-    [document, onDocumentChange],
+    [commitDocument, document],
   );
 
+  const renameGroup = useCallback(
+    (groupId: string, label: string) => {
+      const nextLabel = label.trim();
+      if (!nextLabel) {
+        return;
+      }
+
+      commitDocument(updateLayerEditorGroup(document, groupId, { label: nextLabel }));
+    },
+    [commitDocument, document],
+  );
+
+  const undo = useCallback(() => {
+    if (readOnly || !history || !onHistoryChange || !canUndo) {
+      return;
+    }
+
+    const nextHistory = undoLayerEditorHistory(history);
+    onHistoryChange(nextHistory);
+    onDocumentChange?.(nextHistory.present);
+    emitSelection(nextHistory.present, resolvedSelection);
+  }, [
+    canUndo,
+    emitSelection,
+    history,
+    onDocumentChange,
+    onHistoryChange,
+    readOnly,
+    resolvedSelection,
+  ]);
+
+  const redo = useCallback(() => {
+    if (readOnly || !history || !onHistoryChange || !canRedo) {
+      return;
+    }
+
+    const nextHistory = redoLayerEditorHistory(history);
+    onHistoryChange(nextHistory);
+    onDocumentChange?.(nextHistory.present);
+    emitSelection(nextHistory.present, resolvedSelection);
+  }, [
+    canRedo,
+    emitSelection,
+    history,
+    onDocumentChange,
+    onHistoryChange,
+    readOnly,
+    resolvedSelection,
+  ]);
+
+  const groupSelectedLayersCallback = groupSelectedLayers;
+
+  const removeSelectedLayersCallback = removeSelectedLayers;
+
+  const duplicateSelectedLayersCallback = duplicateSelectedLayers;
+
+  const addGroupCallback = addGroup;
+
+  const addLayerCallback = addLayer;
+
+  const removeGroupCallback = removeGroup;
+
+  const ungroupGroupCallback = ungroupGroup;
+
+  const selectLayersCallback = selectLayers;
+
+  const clearSelectionCallback = clearSelection;
+
+  const duplicateLayersCallback = duplicateLayers;
+
+  const removeLayersCallback = removeLayers;
+
+  const toggleGroupLockedCallback = toggleGroupLocked;
+
+  const toggleGroupVisibilityCallback = toggleGroupVisibility;
+
+  const renameGroupCallback = renameGroup;
+
+  const undoCallback = undo;
+
+  const redoCallback = redo;
+
+  const commitDocumentCallback = commitDocument;
+
+  const moveLayerCallback = moveLayer;
+
+  const moveLayerRelativeToCallback = moveLayerRelativeTo;
+
+  const renameLayerCallback = renameLayer;
+
+  const selectLayerCallback = selectLayer;
+
+  const toggleGroupCollapsedCallback = toggleGroupCollapsed;
+
+  const toggleLayerLockedCallback = toggleLayerLocked;
+
+  const toggleLayerVisibilityCallback = toggleLayerVisibility;
+
   return {
+    addGroup: addGroupCallback,
+    addLayer: addLayerCallback,
+    canRedo,
+    canUndo,
+    clearSelection: clearSelectionCallback,
+    commitDocument: commitDocumentCallback,
     document,
-    moveLayer,
-    moveLayerRelativeTo,
-    renameLayer,
+    duplicateLayers: duplicateLayersCallback,
+    duplicateSelectedLayers: duplicateSelectedLayersCallback,
+    groupSelectedLayers: groupSelectedLayersCallback,
+    moveLayer: moveLayerCallback,
+    moveLayerRelativeTo: moveLayerRelativeToCallback,
+    readOnly,
+    redo: redoCallback,
+    removeGroup: removeGroupCallback,
+    removeLayers: removeLayersCallback,
+    removeSelectedLayers: removeSelectedLayersCallback,
+    renameGroup: renameGroupCallback,
+    renameLayer: renameLayerCallback,
     selection: resolvedSelection,
-    selectLayer,
-    toggleGroupCollapsed,
-    toggleLayerLocked,
-    toggleLayerVisibility,
+    selectLayer: selectLayerCallback,
+    selectLayers: selectLayersCallback,
+    toggleGroupCollapsed: toggleGroupCollapsedCallback,
+    toggleGroupLocked: toggleGroupLockedCallback,
+    toggleGroupVisibility: toggleGroupVisibilityCallback,
+    toggleLayerLocked: toggleLayerLockedCallback,
+    toggleLayerVisibility: toggleLayerVisibilityCallback,
+    undo: undoCallback,
+    ungroupGroup: ungroupGroupCallback,
   };
 }
 
-export function LayerEditorPanel<TLayerData = Record<string, unknown>>({
+function nearestSurvivingLayerSelection<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>(
+  previousDocument: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+  nextDocument: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+  removedLayerIds: readonly string[],
+): LayerEditorSelection {
+  const removedLayerIdSet = new Set(removedLayerIds);
+  const firstRemovedIndex = previousDocument.layers.findIndex((layer) =>
+    removedLayerIdSet.has(layer.id),
+  );
+
+  const fallbackLayer =
+    nextDocument.layers[Math.min(Math.max(firstRemovedIndex, 0), nextDocument.layers.length - 1)] ??
+    null;
+
+  return {
+    layerIds: fallbackLayer ? [fallbackLayer.id] : [],
+    primaryLayerId: fallbackLayer?.id ?? null,
+  };
+}
+
+export function LayerEditorPanel<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>({
   className,
+  createGroup,
+  createLayer,
   document,
-  onLayerMenuClick,
+  features,
+  history,
+  historyLimit,
   onDocumentChange,
+  onHistoryChange,
   onSelectionChange,
   readOnly = false,
+  renderGroupActions,
+  renderLayerActions,
   renderLayerLabel,
   renderLayerMeta,
   selection,
-}: LayerEditorPanelProps<TLayerData>) {
+}: LayerEditorPanelProps<TLayerData, TGroupData, TSourceData>) {
+  const resolvedFeatures = resolveLayerEditorPanelFeatures(
+    features,
+    Boolean(history && onHistoryChange),
+  );
   const controller = useLayerEditorController({
+    createGroup,
+    createLayer,
     document,
+    history,
+    historyLimit,
     onDocumentChange,
+    onHistoryChange,
     onSelectionChange,
+    readOnly,
     selection,
   });
   const groups = document.groups ?? [];
@@ -246,6 +760,7 @@ export function LayerEditorPanel<TLayerData = Record<string, unknown>>({
   );
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const [openLayerMenuLayerId, setOpenLayerMenuLayerId] = useState<string | null>(null);
+  const [openGroupMenuGroupId, setOpenGroupMenuGroupId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!focusedTreeItemKey || !treeItems.some((item) => item.key === focusedTreeItemKey)) {
@@ -306,112 +821,207 @@ export function LayerEditorPanel<TLayerData = Record<string, unknown>>({
     [controller, readOnly],
   );
 
+  const handlePanelKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (!resolvedFeatures.keyboardCommands || isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+
+      const modifier = event.metaKey || event.ctrlKey;
+      if ((event.key === "Delete" || event.key === "Backspace") && !readOnly) {
+        event.preventDefault();
+        controller.removeSelectedLayers();
+        return;
+      }
+
+      if (modifier && event.key.toLowerCase() === "d" && !readOnly) {
+        event.preventDefault();
+        controller.duplicateSelectedLayers();
+        return;
+      }
+
+      if (modifier && event.key.toLowerCase() === "g" && !readOnly) {
+        event.preventDefault();
+        controller.groupSelectedLayers();
+        return;
+      }
+
+      if (modifier && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          controller.redo();
+        } else {
+          controller.undo();
+        }
+      }
+    },
+    [controller, readOnly, resolvedFeatures.keyboardCommands],
+  );
+
   return (
     <TooltipProvider>
-      <div
-        aria-multiselectable="true"
-        className={joinClassNames("mb-layer-editor", className)}
-        role="tree"
-      >
-        {groups.map((group) => (
-          <LayerEditorGroupRow
-            key={group.id}
-            controller={controller}
-            document={document}
-            draggedLayerId={draggedLayerId}
-            firstTreeItemKey={firstTreeItemKey}
-            focusedTreeItemKey={focusedTreeItemKey}
-            group={group}
-            onDragLayerChange={setDraggedLayerId}
-            onLayerMenuClick={onLayerMenuClick}
-            onOpenLayerMenuChange={setOpenLayerMenuLayerId}
-            onTreeItemFocus={setFocusedTreeItemKey}
-            onTreeItemKeyDown={handleTreeItemKeyDown}
-            openLayerMenuLayerId={openLayerMenuLayerId}
-            readOnly={readOnly}
-            renderLayerLabel={renderLayerLabel}
-            renderLayerMeta={renderLayerMeta}
-          />
-        ))}
-        {ungroupedLayers.map((layer) => (
-          <LayerEditorLayerRow
-            key={layer.id}
-            controller={controller}
-            document={document}
-            draggedLayerId={draggedLayerId}
-            firstTreeItemKey={firstTreeItemKey}
-            focusedTreeItemKey={focusedTreeItemKey}
-            layer={layer}
-            onDragLayerChange={setDraggedLayerId}
-            onLayerMenuClick={onLayerMenuClick}
-            onOpenLayerMenuChange={setOpenLayerMenuLayerId}
-            onTreeItemFocus={setFocusedTreeItemKey}
-            onTreeItemKeyDown={handleTreeItemKeyDown}
-            openLayerMenuLayerId={openLayerMenuLayerId}
-            readOnly={readOnly}
-            renderLayerLabel={renderLayerLabel}
-            renderLayerMeta={renderLayerMeta}
-          />
-        ))}
+      <div className={joinClassNames("mb-layer-editor", className)} onKeyDown={handlePanelKeyDown}>
+        {resolvedFeatures.toolbar ? (
+          <LayerEditorToolbar controller={controller} features={resolvedFeatures} />
+        ) : null}
+        <div aria-multiselectable="true" role="tree">
+          {groups.length === 0 && ungroupedLayers.length === 0 ? (
+            <p className="mb-layer-editor__empty">No layers.</p>
+          ) : null}
+          {groups.map((group) => (
+            <LayerEditorGroupRow
+              key={group.id}
+              controller={controller}
+              document={document}
+              draggedLayerId={draggedLayerId}
+              features={resolvedFeatures}
+              firstTreeItemKey={firstTreeItemKey}
+              focusedTreeItemKey={focusedTreeItemKey}
+              group={group}
+              onDragLayerChange={setDraggedLayerId}
+              onOpenGroupMenuChange={setOpenGroupMenuGroupId}
+              onOpenLayerMenuChange={setOpenLayerMenuLayerId}
+              onTreeItemFocus={setFocusedTreeItemKey}
+              onTreeItemKeyDown={handleTreeItemKeyDown}
+              openGroupMenuGroupId={openGroupMenuGroupId}
+              openLayerMenuLayerId={openLayerMenuLayerId}
+              readOnly={readOnly}
+              renderGroupActions={renderGroupActions}
+              renderLayerActions={renderLayerActions}
+              renderLayerLabel={renderLayerLabel}
+              renderLayerMeta={renderLayerMeta}
+            />
+          ))}
+          {ungroupedLayers.map((layer) => (
+            <LayerEditorLayerRow
+              key={layer.id}
+              controller={controller}
+              document={document}
+              draggedLayerId={draggedLayerId}
+              features={resolvedFeatures}
+              firstTreeItemKey={firstTreeItemKey}
+              focusedTreeItemKey={focusedTreeItemKey}
+              layer={layer}
+              onDragLayerChange={setDraggedLayerId}
+              onOpenLayerMenuChange={setOpenLayerMenuLayerId}
+              onTreeItemFocus={setFocusedTreeItemKey}
+              onTreeItemKeyDown={handleTreeItemKeyDown}
+              openLayerMenuLayerId={openLayerMenuLayerId}
+              readOnly={readOnly}
+              renderLayerActions={renderLayerActions}
+              renderLayerLabel={renderLayerLabel}
+              renderLayerMeta={renderLayerMeta}
+            />
+          ))}
+        </div>
       </div>
     </TooltipProvider>
   );
 }
 
-export type LayerEditorGroupRowProps<TLayerData = Record<string, unknown>> = {
-  controller: LayerEditorController<TLayerData>;
-  document: LayerEditorDocument<TLayerData>;
+export type LayerEditorGroupRowProps<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = {
+  controller: LayerEditorController<TLayerData, TGroupData, TSourceData>;
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
   draggedLayerId: string | null;
+  features: Required<LayerEditorPanelFeatures>;
   firstTreeItemKey: string | null;
   focusedTreeItemKey: string | null;
-  group: LayerEditorGroup;
+  group: LayerEditorGroup<TGroupData>;
   onDragLayerChange: (layerId: string | null) => void;
-  onLayerMenuClick?: (
-    layer: LayerEditorLayer<TLayerData>,
-    event: MouseEvent<HTMLButtonElement>,
-  ) => void;
+  onOpenGroupMenuChange: (groupId: string | null) => void;
   onOpenLayerMenuChange: (layerId: string | null) => void;
   onTreeItemFocus: (itemKey: string) => void;
   onTreeItemKeyDown: (context: LayerEditorTreeItemKeyboardContext) => void;
+  openGroupMenuGroupId: string | null;
   openLayerMenuLayerId: string | null;
   readOnly?: boolean;
+  renderGroupActions?: (
+    context: LayerEditorGroupActionContext<TLayerData, TGroupData, TSourceData>,
+  ) => ReactNode;
+  renderLayerActions?: (
+    context: LayerEditorLayerActionContext<TLayerData, TGroupData, TSourceData>,
+  ) => ReactNode;
   renderLayerLabel?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
   renderLayerMeta?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
 };
 
-export function LayerEditorGroupRow<TLayerData = Record<string, unknown>>({
+export function LayerEditorGroupRow<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>({
   controller,
   document,
   draggedLayerId,
+  features,
   firstTreeItemKey,
   focusedTreeItemKey,
   group,
   onDragLayerChange,
-  onLayerMenuClick,
+  onOpenGroupMenuChange,
   onOpenLayerMenuChange,
   onTreeItemFocus,
   onTreeItemKeyDown,
+  openGroupMenuGroupId,
   openLayerMenuLayerId,
   readOnly = false,
+  renderGroupActions,
+  renderLayerActions,
   renderLayerLabel,
   renderLayerMeta,
-}: LayerEditorGroupRowProps<TLayerData>) {
+}: LayerEditorGroupRowProps<TLayerData, TGroupData, TSourceData>) {
   const layers = group.layerIds
     .map((layerId) => document.layers.find((layer) => layer.id === layerId))
     .filter((layer): layer is LayerEditorLayer<TLayerData> => Boolean(layer));
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const itemKey = groupTreeItemKey(group.id);
   const collapsed = group.collapsed ?? false;
+  const visible = group.visible ?? true;
+  const locked = group.locked ?? false;
+  const groupMenuOpen = openGroupMenuGroupId === group.id;
+
+  const beginRename = () => {
+    if (!readOnly) {
+      setEditingLabel(group.label);
+    }
+  };
+
+  const commitLabelEdit = () => {
+    if (editingLabel !== null && editingLabel.trim() !== group.label) {
+      controller.renameGroup(group.id, editingLabel);
+    }
+    setEditingLabel(null);
+  };
+
+  const cancelLabelEdit = () => {
+    setEditingLabel(null);
+    queueMicrotask(() => rowRef.current?.focus());
+  };
 
   return (
     <Collapsible className="mb-layer-editor__group" open={!collapsed}>
       <div
+        ref={rowRef}
         aria-expanded={!collapsed}
         className="mb-layer-editor__group-header"
         data-layer-editor-tree-item-key={itemKey}
         role="treeitem"
         tabIndex={treeItemTabIndex(itemKey, focusedTreeItemKey, firstTreeItemKey)}
         onFocus={() => onTreeItemFocus(itemKey)}
-        onKeyDown={(event) => onTreeItemKeyDown({ event, group, itemKey, kind: "group" })}
+        onKeyDown={(event) => {
+          if (event.key === "F2" && event.target === event.currentTarget && !readOnly) {
+            event.preventDefault();
+            beginRename();
+            return;
+          }
+
+          onTreeItemKeyDown({ event, group, itemKey, kind: "group" });
+        }}
       >
         <Tooltip>
           <TooltipTrigger asChild>
@@ -438,9 +1048,123 @@ export function LayerEditorGroupRow<TLayerData = Record<string, unknown>>({
           </TooltipTrigger>
           <TooltipContent>{collapsed ? "Expand group" : "Collapse group"}</TooltipContent>
         </Tooltip>
-        <span className="mb-layer-editor__group-label">
-          <Layers aria-hidden="true" size={16} /> {group.label}
-        </span>
+        {editingLabel === null ? (
+          <span className="mb-layer-editor__group-label" onDoubleClick={beginRename}>
+            <Layers aria-hidden="true" size={16} /> {group.label}
+          </span>
+        ) : (
+          <Input
+            aria-label={`Rename group ${group.label}`}
+            autoFocus={true}
+            className="mb-layer-editor__layer-label-input"
+            type="text"
+            value={editingLabel}
+            onBlur={commitLabelEdit}
+            onChange={(event) => setEditingLabel(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Enter") {
+                commitLabelEdit();
+                queueMicrotask(() => rowRef.current?.focus());
+              }
+
+              if (event.key === "Escape") {
+                cancelLabelEdit();
+              }
+            }}
+          />
+        )}
+        {features.groupMenus ? (
+          <div className="mb-layer-editor__group-actions">
+            <DropdownMenu
+              open={groupMenuOpen}
+              onOpenChange={(open) => onOpenGroupMenuChange(open ? group.id : null)}
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      aria-label={`Group menu ${group.label}`}
+                      className="mb-layer-editor__icon-button"
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenGroupMenuChange(groupMenuOpen ? null : group.id);
+                      }}
+                    >
+                      <MoreHorizontal aria-hidden="true" size={16} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Group actions</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent
+                align="end"
+                aria-label={`${group.label} options`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <DropdownMenuItem disabled={readOnly} onSelect={beginRename}>
+                  <Pencil aria-hidden="true" size={16} />
+                  Rename group
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={readOnly}
+                  onSelect={() => controller.ungroupGroup(group.id)}
+                >
+                  <FolderMinus aria-hidden="true" size={16} />
+                  Ungroup
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={readOnly}
+                  onSelect={() => controller.toggleGroupVisibility(group.id)}
+                >
+                  {visible ? (
+                    <EyeOff aria-hidden="true" size={16} />
+                  ) : (
+                    <Eye aria-hidden="true" size={16} />
+                  )}
+                  {visible ? "Hide group" : "Show group"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={readOnly}
+                  onSelect={() => controller.toggleGroupLocked(group.id)}
+                >
+                  {locked ? (
+                    <Unlock aria-hidden="true" size={16} />
+                  ) : (
+                    <Lock aria-hidden="true" size={16} />
+                  )}
+                  {locked ? "Unlock group" : "Lock group"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="mb-layer-editor__menu-danger"
+                  disabled={readOnly}
+                  onSelect={() => controller.removeGroup(group.id)}
+                >
+                  <Trash2 aria-hidden="true" size={16} />
+                  Delete group only
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="mb-layer-editor__menu-danger"
+                  disabled={readOnly}
+                  onSelect={() => controller.removeGroup(group.id, { removeLayers: true })}
+                >
+                  <Trash2 aria-hidden="true" size={16} />
+                  Delete group and layers
+                </DropdownMenuItem>
+                {renderGroupActions?.({
+                  controller,
+                  document,
+                  group,
+                  selection: controller.selection,
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : null}
       </div>
       <CollapsibleContent
         aria-label={group.label}
@@ -455,16 +1179,17 @@ export function LayerEditorGroupRow<TLayerData = Record<string, unknown>>({
                 controller={controller}
                 document={document}
                 draggedLayerId={draggedLayerId}
+                features={features}
                 firstTreeItemKey={firstTreeItemKey}
                 focusedTreeItemKey={focusedTreeItemKey}
                 layer={layer}
                 onDragLayerChange={onDragLayerChange}
-                onLayerMenuClick={onLayerMenuClick}
                 onOpenLayerMenuChange={onOpenLayerMenuChange}
                 onTreeItemFocus={onTreeItemFocus}
                 onTreeItemKeyDown={onTreeItemKeyDown}
                 openLayerMenuLayerId={openLayerMenuLayerId}
                 readOnly={readOnly}
+                renderLayerActions={renderLayerActions}
                 renderLayerLabel={renderLayerLabel}
                 renderLayerMeta={renderLayerMeta}
               />
@@ -474,44 +1199,53 @@ export function LayerEditorGroupRow<TLayerData = Record<string, unknown>>({
   );
 }
 
-export type LayerEditorLayerRowProps<TLayerData = Record<string, unknown>> = {
-  controller: LayerEditorController<TLayerData>;
-  document: LayerEditorDocument<TLayerData>;
+export type LayerEditorLayerRowProps<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = {
+  controller: LayerEditorController<TLayerData, TGroupData, TSourceData>;
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
   draggedLayerId: string | null;
+  features: Required<LayerEditorPanelFeatures>;
   firstTreeItemKey: string | null;
   focusedTreeItemKey: string | null;
   layer: LayerEditorLayer<TLayerData>;
   onDragLayerChange: (layerId: string | null) => void;
-  onLayerMenuClick?: (
-    layer: LayerEditorLayer<TLayerData>,
-    event: MouseEvent<HTMLButtonElement>,
-  ) => void;
   onOpenLayerMenuChange: (layerId: string | null) => void;
   onTreeItemFocus: (itemKey: string) => void;
   onTreeItemKeyDown: (context: LayerEditorTreeItemKeyboardContext) => void;
   openLayerMenuLayerId: string | null;
   readOnly?: boolean;
+  renderLayerActions?: (
+    context: LayerEditorLayerActionContext<TLayerData, TGroupData, TSourceData>,
+  ) => ReactNode;
   renderLayerLabel?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
   renderLayerMeta?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
 };
 
-export function LayerEditorLayerRow<TLayerData = Record<string, unknown>>({
+export function LayerEditorLayerRow<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>({
   controller,
   document,
   draggedLayerId,
+  features,
   firstTreeItemKey,
   focusedTreeItemKey,
   layer,
   onDragLayerChange,
-  onLayerMenuClick,
   onOpenLayerMenuChange,
   onTreeItemFocus,
   onTreeItemKeyDown,
   openLayerMenuLayerId,
   readOnly = false,
+  renderLayerActions,
   renderLayerLabel,
   renderLayerMeta,
-}: LayerEditorLayerRowProps<TLayerData>) {
+}: LayerEditorLayerRowProps<TLayerData, TGroupData, TSourceData>) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<LayerEditorLayerDropPosition | null>(null);
@@ -678,71 +1412,92 @@ export function LayerEditorLayerRow<TLayerData = Record<string, unknown>>({
         </span>
       </div>
       <div className="mb-layer-editor__layer-options">
-        <DropdownMenu
-          open={layerMenuOpen}
-          onOpenChange={(open) => onOpenLayerMenuChange(open ? layer.id : null)}
-        >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  aria-label={`Layer menu ${layer.label}`}
-                  className="mb-layer-editor__icon-button"
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onLayerMenuClick?.(layer, event);
-                    if (event.defaultPrevented) {
-                      onOpenLayerMenuChange(null);
-                      return;
-                    }
-
-                    onOpenLayerMenuChange(layerMenuOpen ? null : layer.id);
-                  }}
-                >
-                  <MoreHorizontal aria-hidden="true" size={16} />
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>Layer actions</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent
-            align="end"
-            aria-label={`${layer.label} options`}
-            onClick={(event) => event.stopPropagation()}
+        {features.layerMenus ? (
+          <DropdownMenu
+            open={layerMenuOpen}
+            onOpenChange={(open) => onOpenLayerMenuChange(open ? layer.id : null)}
           >
-            <DropdownMenuItem
-              disabled={readOnly}
-              onSelect={() => {
-                controller.toggleLayerVisibility(layer.id);
-                onOpenLayerMenuChange(null);
-              }}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    aria-label={`Layer menu ${layer.label}`}
+                    className="mb-layer-editor__icon-button"
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenLayerMenuChange(layerMenuOpen ? null : layer.id);
+                    }}
+                  >
+                    <MoreHorizontal aria-hidden="true" size={16} />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Layer actions</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent
+              align="end"
+              aria-label={`${layer.label} options`}
+              onClick={(event) => event.stopPropagation()}
             >
-              {visible ? (
-                <EyeOff aria-hidden="true" size={16} />
-              ) : (
-                <Eye aria-hidden="true" size={16} />
-              )}
-              {visible ? "Hide" : "Show"}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={readOnly}
-              onSelect={() => {
-                controller.toggleLayerLocked(layer.id);
-                onOpenLayerMenuChange(null);
-              }}
-            >
-              {locked ? (
-                <Unlock aria-hidden="true" size={16} />
-              ) : (
-                <Lock aria-hidden="true" size={16} />
-              )}
-              {locked ? "Unlock" : "Lock"}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuItem disabled={readOnly} onSelect={beginRename}>
+                <Pencil aria-hidden="true" size={16} />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={readOnly}
+                onSelect={() => controller.duplicateLayers([layer.id])}
+              >
+                <Copy aria-hidden="true" size={16} />
+                Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="mb-layer-editor__menu-danger"
+                disabled={readOnly}
+                onSelect={() => controller.removeLayers([layer.id])}
+              >
+                <Trash2 aria-hidden="true" size={16} />
+                Delete
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={readOnly}
+                onSelect={() => {
+                  controller.toggleLayerVisibility(layer.id);
+                  onOpenLayerMenuChange(null);
+                }}
+              >
+                {visible ? (
+                  <EyeOff aria-hidden="true" size={16} />
+                ) : (
+                  <Eye aria-hidden="true" size={16} />
+                )}
+                {visible ? "Hide" : "Show"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={readOnly}
+                onSelect={() => {
+                  controller.toggleLayerLocked(layer.id);
+                  onOpenLayerMenuChange(null);
+                }}
+              >
+                {locked ? (
+                  <Unlock aria-hidden="true" size={16} />
+                ) : (
+                  <Lock aria-hidden="true" size={16} />
+                )}
+                {locked ? "Unlock" : "Lock"}
+              </DropdownMenuItem>
+              {renderLayerActions?.({
+                controller,
+                document,
+                layer,
+                selection: controller.selection,
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </div>
       <IconButton
         disabled={readOnly || layerIndex <= 0}
@@ -766,6 +1521,98 @@ export function LayerEditorLayerRow<TLayerData = Record<string, unknown>>({
       >
         <ChevronDown aria-hidden="true" size={16} />
       </IconButton>
+    </div>
+  );
+}
+
+function LayerEditorToolbar<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>({
+  controller,
+  features,
+}: {
+  controller: LayerEditorController<TLayerData, TGroupData, TSourceData>;
+  features: Required<LayerEditorPanelFeatures>;
+}) {
+  const hasSelectedLayers = controller.selection.layerIds.length > 0;
+  const showHistoryControls = features.historyControls;
+
+  return (
+    <div className="mb-layer-editor__toolbar" role="toolbar">
+      <div className="mb-layer-editor__toolbar-group">
+        <IconButton
+          disabled={controller.readOnly}
+          label="Add layer"
+          tooltip="Add layer"
+          onClick={(event) => {
+            event.stopPropagation();
+            controller.addLayer();
+          }}
+        >
+          <Plus aria-hidden="true" size={16} />
+        </IconButton>
+        <IconButton
+          disabled={controller.readOnly || !hasSelectedLayers}
+          label="Duplicate selected layers"
+          tooltip="Duplicate selected layers"
+          onClick={(event) => {
+            event.stopPropagation();
+            controller.duplicateSelectedLayers();
+          }}
+        >
+          <Copy aria-hidden="true" size={16} />
+        </IconButton>
+        <IconButton
+          disabled={controller.readOnly || !hasSelectedLayers}
+          label="Delete selected layers"
+          tooltip="Delete selected layers"
+          onClick={(event) => {
+            event.stopPropagation();
+            controller.removeSelectedLayers();
+          }}
+        >
+          <Trash2 aria-hidden="true" size={16} />
+        </IconButton>
+        <IconButton
+          disabled={controller.readOnly || !hasSelectedLayers}
+          label="Group selected layers"
+          tooltip="Group selected layers"
+          onClick={(event) => {
+            event.stopPropagation();
+            controller.groupSelectedLayers();
+          }}
+        >
+          <FolderPlus aria-hidden="true" size={16} />
+        </IconButton>
+      </div>
+      {showHistoryControls ? (
+        <div className="mb-layer-editor__toolbar-group">
+          <IconButton
+            disabled={controller.readOnly || !controller.canUndo}
+            label="Undo"
+            tooltip="Undo"
+            onClick={(event) => {
+              event.stopPropagation();
+              controller.undo();
+            }}
+          >
+            <Undo2 aria-hidden="true" size={16} />
+          </IconButton>
+          <IconButton
+            disabled={controller.readOnly || !controller.canRedo}
+            label="Redo"
+            tooltip="Redo"
+            onClick={(event) => {
+              event.stopPropagation();
+              controller.redo();
+            }}
+          >
+            <Redo2 aria-hidden="true" size={16} />
+          </IconButton>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -800,6 +1647,29 @@ function IconButton({
       </TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
+  );
+}
+
+function resolveLayerEditorPanelFeatures(
+  features: LayerEditorPanelFeatures | undefined,
+  hasHistoryHandlers: boolean,
+): Required<LayerEditorPanelFeatures> {
+  return {
+    groupMenus: features?.groupMenus ?? true,
+    historyControls: (features?.historyControls ?? false) && hasHistoryHandlers,
+    keyboardCommands: features?.keyboardCommands ?? true,
+    layerMenus: features?.layerMenus ?? true,
+    toolbar: features?.toolbar ?? true,
+  };
+}
+
+function isEditableKeyboardTarget(target: EventTarget) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'),
   );
 }
 

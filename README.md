@@ -10,7 +10,13 @@ bun add @moritzbrantner/layer-editor
 ## Core
 
 ```ts
-import { createLayerEditorDocument, addLayerEditorLayer } from "@moritzbrantner/layer-editor";
+import {
+  addLayerEditorLayer,
+  createLayerEditorDocument,
+  duplicateLayerEditorLayers,
+  groupLayerEditorLayers,
+  removeLayerEditorLayers,
+} from "@moritzbrantner/layer-editor";
 
 const document = createLayerEditorDocument({
   layers: [
@@ -27,6 +33,15 @@ const nextDocument = addLayerEditorLayer(document, {
   kind: "text",
   label: "Labels",
 });
+
+const groupedDocument = groupLayerEditorLayers(nextDocument, {
+  id: "content",
+  label: "Content",
+  layerIds: ["background", "labels"],
+});
+
+const duplicatedDocument = duplicateLayerEditorLayers(groupedDocument, ["labels"]);
+const cleanedDocument = removeLayerEditorLayers(duplicatedDocument, ["background"]);
 ```
 
 Documents model ordered layers, groups, sources, visibility, locking, opacity,
@@ -44,6 +59,19 @@ import {
 let history = createLayerEditorHistory(document);
 history = commitLayerEditorHistory(history, nextDocument);
 history = undoLayerEditorHistory(history);
+```
+
+React panels can also be controlled with the same history state:
+
+```tsx
+const [history, setHistory] = useState(() => createLayerEditorHistory(document));
+
+<LayerEditorPanel
+  document={history.present}
+  features={{ historyControls: true }}
+  history={history}
+  onHistoryChange={setHistory}
+/>;
 ```
 
 ## Serialization
@@ -76,6 +104,11 @@ export function LayersPanel({ initialDocument }: { initialDocument: LayerEditorD
 
   return (
     <LayerEditorPanel
+      createLayer={({ existingIds }) => ({
+        id: existingIds.has("layer") ? "layer-2" : "layer",
+        kind: "shape",
+        label: "Layer",
+      })}
       document={document}
       selection={selection}
       onDocumentChange={setDocument}
@@ -85,6 +118,18 @@ export function LayersPanel({ initialDocument }: { initialDocument: LayerEditorD
 }
 ```
 
-The package intentionally does not render a scene. Map, canvas, SVG, timeline,
-or domain-specific renderers should consume the document and live in host
-packages or future adapter packages.
+The panel includes generic layer-tree editing: add, duplicate, delete, group,
+rename, reorder, visibility, locking, optional undo/redo controls, keyboard
+commands, and layer/group menus. Domain-specific previews and inspectors remain
+host responsibility. Map, canvas, SVG, timeline, or domain-specific renderers
+should consume the document and live in host packages or future adapter
+packages.
+
+Custom menu content can be added with `renderLayerActions` and
+`renderGroupActions`.
+
+## Migration
+
+`onLayerMenuClick` was removed. Use `renderLayerActions` for custom layer menu
+items and `features={{ layerMenus: false }}` if a host wants to hide the
+built-in layer menu entirely.

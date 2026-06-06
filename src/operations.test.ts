@@ -3,7 +3,10 @@ import {
   addLayerEditorLayer,
   addLayerEditorSource,
   createLayerEditorDocument,
+  createLayerEditorUniqueId,
   duplicateLayerEditorLayer,
+  duplicateLayerEditorLayers,
+  groupLayerEditorLayers,
   LayerEditorDocumentValidationError,
   moveLayerEditorLayer,
   moveLayerEditorLayerRelativeTo,
@@ -12,9 +15,11 @@ import {
   normalizeLayerEditorSelection,
   removeLayerEditorGroup,
   removeLayerEditorLayer,
+  removeLayerEditorLayers,
   removeLayerEditorSource,
   setLayerEditorLayerLocked,
   setLayerEditorLayerVisibility,
+  ungroupLayerEditorGroup,
   updateLayerEditorLayer,
   validateLayerEditorDocument,
   type LayerEditorDocument,
@@ -127,6 +132,56 @@ describe("@moritzbrantner/layer-editor core", () => {
     expect(removed.layers.map((layer) => layer.id)).not.toContain("foreground-copy");
   });
 
+  test("creates unique ids from a base id", () => {
+    expect(createLayerEditorUniqueId("layer", new Set(["other"]))).toBe("layer");
+    expect(createLayerEditorUniqueId("layer", new Set(["layer", "layer-2"]))).toBe("layer-3");
+    expect(createLayerEditorUniqueId(" ", new Set(["item"]))).toBe("item-2");
+  });
+
+  test("removes multiple layers and repairs groups", () => {
+    const grouped = addLayerEditorGroup(document, {
+      id: "content",
+      label: "Content",
+      layerIds: ["mask", "labels"],
+    });
+    const removed = removeLayerEditorLayers(grouped, ["mask", "labels"]);
+
+    expect(removed.layers.map((layer) => layer.id)).toEqual(["background"]);
+    expect(removed.groups).toBeUndefined();
+  });
+
+  test("duplicates multiple layers in document order", () => {
+    const duplicated = duplicateLayerEditorLayers(document, ["labels", "background"]);
+
+    expect(duplicated.layers.map((layer) => layer.id)).toEqual([
+      "background",
+      "background-copy",
+      "mask",
+      "labels",
+      "labels-copy",
+    ]);
+  });
+
+  test("duplicates grouped layers into the same group", () => {
+    const grouped = addLayerEditorGroup(document, {
+      id: "content",
+      label: "Content",
+      layerIds: ["mask", "labels"],
+    });
+    const duplicated = duplicateLayerEditorLayers(grouped, ["mask"]);
+
+    expect(duplicated.layers.map((layer) => layer.id)).toEqual([
+      "background",
+      "mask",
+      "mask-copy",
+      "labels",
+    ]);
+    expect(duplicated.groups?.[0]?.layerIds).toEqual(["mask", "mask-copy", "labels"]);
+    expect(duplicated.layers.find((layer) => layer.id === "mask-copy")?.parentGroupId).toBe(
+      "content",
+    );
+  });
+
   test("toggles visibility and lock state", () => {
     expect(setLayerEditorLayerVisibility(document, "mask", false).layers[1]?.visible).toBe(false);
     expect(setLayerEditorLayerLocked(document, "mask", true).layers[1]?.locked).toBe(true);
@@ -147,6 +202,25 @@ describe("@moritzbrantner/layer-editor core", () => {
     const ungrouped = removeLayerEditorGroup(moved, "content");
     expect(ungrouped.groups).toBeUndefined();
     expect(ungrouped.layers.every((layer) => layer.parentGroupId === undefined)).toBe(true);
+  });
+
+  test("groups and ungroups layers with semantic helpers", () => {
+    const grouped = groupLayerEditorLayers(document, {
+      id: "content",
+      label: "Content",
+      layerIds: ["labels", "missing", "mask", "mask"],
+    });
+
+    expect(grouped.groups?.[0]?.layerIds).toEqual(["labels", "mask"]);
+    expect(grouped.layers.find((layer) => layer.id === "mask")?.parentGroupId).toBe("content");
+
+    const ungrouped = ungroupLayerEditorGroup(grouped, "content");
+    expect(ungrouped.groups).toBeUndefined();
+    expect(ungrouped.layers.map((layer) => layer.parentGroupId)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 
   test("moves ungrouped layers relative to grouped targets", () => {

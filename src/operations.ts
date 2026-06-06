@@ -473,14 +473,27 @@ export function removeLayerEditorLayer<
   TGroupData = Record<string, unknown>,
   TSourceData = Record<string, unknown>,
 >(document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>, layerId: string) {
+  return removeLayerEditorLayers(document, [layerId]);
+}
+
+export function removeLayerEditorLayers<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>(document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>, layerIds: readonly string[]) {
+  const layerIdsToRemove = new Set(layerIds);
+  if (layerIdsToRemove.size === 0) {
+    return document;
+  }
+
   return normalizeLayerEditorDocument(
     {
       ...document,
       groups: document.groups?.map((group) => ({
         ...group,
-        layerIds: group.layerIds.filter((groupLayerId) => groupLayerId !== layerId),
+        layerIds: group.layerIds.filter((groupLayerId) => !layerIdsToRemove.has(groupLayerId)),
       })),
-      layers: document.layers.filter((layer) => layer.id !== layerId),
+      layers: document.layers.filter((layer) => !layerIdsToRemove.has(layer.id)),
     },
     { mode: "repair" },
   );
@@ -501,11 +514,58 @@ export function duplicateLayerEditorLayer<
   }
 
   const existingIds = new Set(document.layers.map((item) => item.id));
-  const id = options.createId?.(layerId, existingIds) ?? createCopyId(layerId, existingIds);
+  const id =
+    options.createId?.(layerId, existingIds) ??
+    createLayerEditorUniqueId(`${layerId}-copy`, existingIds);
   const layerIndex = document.layers.findIndex((item) => item.id === layerId);
   const index = options.index ?? layerIndex + 1;
 
   return addLayerEditorLayer(document, { ...layer, id, label: `${layer.label} Copy` }, { index });
+}
+
+export function duplicateLayerEditorLayers<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>(
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+  layerIds: readonly string[],
+  options: Pick<LayerEditorDuplicateLayerOptions, "createId"> = {},
+) {
+  const selectedLayerIds = new Set(layerIds);
+  if (selectedLayerIds.size === 0) {
+    return document;
+  }
+
+  const existingIds = new Set(document.layers.map((layer) => layer.id));
+  const copiedLayerIds = new Map<string, string>();
+  const layers = document.layers.flatMap((layer) => {
+    if (!selectedLayerIds.has(layer.id)) {
+      return [layer];
+    }
+
+    const id =
+      options.createId?.(layer.id, existingIds) ??
+      createLayerEditorUniqueId(`${layer.id}-copy`, existingIds);
+    existingIds.add(id);
+    copiedLayerIds.set(layer.id, id);
+
+    return [layer, { ...layer, id, label: `${layer.label} Copy` }];
+  });
+
+  if (copiedLayerIds.size === 0) {
+    return document;
+  }
+
+  const groups = document.groups?.map((group) => ({
+    ...group,
+    layerIds: group.layerIds.flatMap((layerId) => {
+      const copiedLayerId = copiedLayerIds.get(layerId);
+      return copiedLayerId ? [layerId, copiedLayerId] : [layerId];
+    }),
+  }));
+
+  return normalizeLayerEditorDocument({ ...document, groups, layers }, { mode: "repair" });
 }
 
 export function moveLayerEditorLayer<
@@ -667,6 +727,17 @@ export function addLayerEditorGroup<
   );
 }
 
+export function groupLayerEditorLayers<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>(
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+  group: LayerEditorGroup<TGroupData>,
+) {
+  return addLayerEditorGroup(document, group);
+}
+
 export function updateLayerEditorGroup<
   TLayerData = Record<string, unknown>,
   TGroupData = Record<string, unknown>,
@@ -711,6 +782,14 @@ export function removeLayerEditorGroup<
     },
     { mode: "repair" },
   );
+}
+
+export function ungroupLayerEditorGroup<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>(document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>, groupId: string) {
+  return removeLayerEditorGroup(document, groupId, { removeLayers: false });
 }
 
 export function moveLayerEditorGroup<
@@ -792,6 +871,22 @@ export function removeLayerEditorSource<
     },
     { mode: "repair" },
   );
+}
+
+export function createLayerEditorUniqueId(baseId: string, existingIds: ReadonlySet<string>) {
+  const normalizedBaseId = baseId.trim() || "item";
+  if (!existingIds.has(normalizedBaseId)) {
+    return normalizedBaseId;
+  }
+
+  let index = 2;
+  let id = `${normalizedBaseId}-${index}`;
+  while (existingIds.has(id)) {
+    index += 1;
+    id = `${normalizedBaseId}-${index}`;
+  }
+
+  return id;
 }
 
 function normalizeLayer<TLayerData>(
@@ -914,14 +1009,4 @@ function clampInsertIndex(index: number | undefined, length: number) {
   }
 
   return Math.min(length, Math.max(0, Math.trunc(index)));
-}
-
-function createCopyId(layerId: string, existingIds: ReadonlySet<string>) {
-  let index = 1;
-  let id = `${layerId}-copy`;
-  while (existingIds.has(id)) {
-    index += 1;
-    id = `${layerId}-copy-${index}`;
-  }
-  return id;
 }
