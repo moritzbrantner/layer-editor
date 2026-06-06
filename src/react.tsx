@@ -29,9 +29,11 @@ import {
   Pencil,
   Plus,
   Redo2,
+  Search,
   Trash2,
   Unlock,
   Undo2,
+  X,
 } from "lucide-react";
 import {
   useCallback,
@@ -52,6 +54,7 @@ import {
   groupLayerEditorLayers,
   moveLayerEditorLayer,
   moveLayerEditorLayerRelativeTo,
+  moveLayerEditorLayerToGroup,
   normalizeLayerEditorSelection,
   removeLayerEditorGroup,
   removeLayerEditorLayers,
@@ -65,6 +68,7 @@ import {
   type LayerEditorLayer,
   type LayerEditorLayerDropPosition,
   type LayerEditorSelection,
+  type LayerEditorSource,
 } from "./core";
 import {
   canRedoLayerEditorHistory,
@@ -87,11 +91,32 @@ type LayerEditorTreeItemKeyboardContext = {
   layer?: { id: string };
 };
 
+type LayerEditorDropTarget = {
+  id: string | null;
+  kind: "group" | "root";
+};
+
+type LayerEditorRenderedGroup<TLayerData, TGroupData> = {
+  forceExpanded: boolean;
+  group: LayerEditorGroup<TGroupData>;
+  layers: Array<LayerEditorLayer<TLayerData>>;
+};
+
+type LayerEditorRenderedTree<TLayerData, TGroupData> = {
+  groups: Array<LayerEditorRenderedGroup<TLayerData, TGroupData>>;
+  hasFilter: boolean;
+  hasMatches: boolean;
+  treeItems: LayerEditorTreeItem[];
+  ungroupedLayers: Array<LayerEditorLayer<TLayerData>>;
+  visibleLayerIds: string[];
+};
+
 export type LayerEditorPanelFeatures = {
   groupMenus?: boolean;
   historyControls?: boolean;
   keyboardCommands?: boolean;
   layerMenus?: boolean;
+  search?: boolean;
   toolbar?: boolean;
 };
 
@@ -137,6 +162,32 @@ export type LayerEditorGroupActionContext<
   selection: LayerEditorSelection;
 };
 
+export type LayerEditorFilterContext<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = {
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
+  query: string;
+};
+
+export type LayerEditorLayerFilterContext<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = LayerEditorFilterContext<TLayerData, TGroupData, TSourceData> & {
+  layer: LayerEditorLayer<TLayerData>;
+  source: LayerEditorSource<TSourceData> | null;
+};
+
+export type LayerEditorGroupFilterContext<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+> = LayerEditorFilterContext<TLayerData, TGroupData, TSourceData> & {
+  group: LayerEditorGroup<TGroupData>;
+};
+
 export type LayerEditorPanelProps<
   TLayerData = Record<string, unknown>,
   TGroupData = Record<string, unknown>,
@@ -150,6 +201,14 @@ export type LayerEditorPanelProps<
     context: LayerEditorCreateLayerContext<TLayerData, TGroupData, TSourceData>,
   ) => LayerEditorLayer<TLayerData>;
   document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
+  filterGroup?: (
+    context: LayerEditorGroupFilterContext<TLayerData, TGroupData, TSourceData>,
+  ) => boolean;
+  filterLayer?: (
+    context: LayerEditorLayerFilterContext<TLayerData, TGroupData, TSourceData>,
+  ) => boolean;
+  filterPlaceholder?: string;
+  filterQuery?: string;
   features?: LayerEditorPanelFeatures;
   history?: LayerEditorHistoryState<TLayerData, TGroupData, TSourceData>;
   historyLimit?: number;
@@ -164,6 +223,7 @@ export type LayerEditorPanelProps<
   renderLayerLabel?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
   renderLayerMeta?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
   onDocumentChange?: (document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>) => void;
+  onFilterQueryChange?: (query: string) => void;
   onHistoryChange?: (history: LayerEditorHistoryState<TLayerData, TGroupData, TSourceData>) => void;
   onSelectionChange?: (selection: LayerEditorSelection) => void;
 };
@@ -194,6 +254,7 @@ export type LayerEditorController<
     targetLayerId: string,
     position: LayerEditorLayerDropPosition,
   ) => void;
+  moveLayerToGroup: (layerId: string, groupId: string | null, targetIndex?: number) => void;
   redo: () => void;
   removeGroup: (groupId: string, options?: { removeLayers?: boolean }) => void;
   removeLayers: (layerIds: readonly string[]) => void;
@@ -542,6 +603,22 @@ export function useLayerEditorController<
     [commitDocument, document],
   );
 
+  const moveLayerToGroup = useCallback(
+    (layerId: string, groupId: string | null, targetIndex?: number) => {
+      if (readOnly) {
+        return;
+      }
+
+      commitDocument(moveLayerEditorLayerToGroup(document, layerId, groupId, targetIndex), {
+        ...resolvedSelection,
+        primaryLayerId: resolvedSelection.layerIds.includes(layerId)
+          ? layerId
+          : resolvedSelection.primaryLayerId,
+      });
+    },
+    [commitDocument, document, readOnly, resolvedSelection],
+  );
+
   const renameLayer = useCallback(
     (layerId: string, label: string) => {
       const nextLabel = label.trim();
@@ -642,6 +719,8 @@ export function useLayerEditorController<
 
   const moveLayerRelativeToCallback = moveLayerRelativeTo;
 
+  const moveLayerToGroupCallback = moveLayerToGroup;
+
   const renameLayerCallback = renameLayer;
 
   const selectLayerCallback = selectLayer;
@@ -665,6 +744,7 @@ export function useLayerEditorController<
     groupSelectedLayers: groupSelectedLayersCallback,
     moveLayer: moveLayerCallback,
     moveLayerRelativeTo: moveLayerRelativeToCallback,
+    moveLayerToGroup: moveLayerToGroupCallback,
     readOnly,
     redo: redoCallback,
     removeGroup: removeGroupCallback,
@@ -718,10 +798,15 @@ export function LayerEditorPanel<
   createGroup,
   createLayer,
   document,
+  filterGroup,
+  filterLayer,
+  filterPlaceholder = "Search layers",
+  filterQuery,
   features,
   history,
   historyLimit,
   onDocumentChange,
+  onFilterQueryChange,
   onHistoryChange,
   onSelectionChange,
   readOnly = false,
@@ -747,18 +832,40 @@ export function LayerEditorPanel<
     readOnly,
     selection,
   });
-  const groups = document.groups ?? [];
-  const groupedLayerIds = new Set(groups.flatMap((group) => group.layerIds));
-  const ungroupedLayers = document.layers.filter((layer) => !groupedLayerIds.has(layer.id));
-  const treeItems = useMemo(
-    () => getVisibleTreeItems(document, groupedLayerIds),
-    [document, groupedLayerIds],
+
+  const [uncontrolledFilterQuery, setUncontrolledFilterQuery] = useState("");
+  const activeFilterQuery = filterQuery ?? uncontrolledFilterQuery;
+  const setFilterQuery = useCallback(
+    (query: string) => {
+      if (filterQuery === undefined) {
+        setUncontrolledFilterQuery(query);
+      }
+      onFilterQueryChange?.(query);
+    },
+    [filterQuery, onFilterQueryChange],
   );
+
+  const renderedTree = useMemo(
+    () =>
+      getFilteredLayerEditorTree({
+        document,
+        filterGroup,
+        filterLayer,
+        query: activeFilterQuery,
+      }),
+    [activeFilterQuery, document, filterGroup, filterLayer],
+  );
+  const { groups, hasFilter, hasMatches, treeItems, ungroupedLayers, visibleLayerIds } =
+    renderedTree;
   const firstTreeItemKey = treeItems[0]?.key ?? null;
   const [focusedTreeItemKey, setFocusedTreeItemKey] = useState<string | null>(() =>
     selection?.primaryLayerId ? layerTreeItemKey(selection.primaryLayerId) : firstTreeItemKey,
   );
+  const [selectionAnchorLayerId, setSelectionAnchorLayerId] = useState<string | null>(
+    selection?.primaryLayerId ?? null,
+  );
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
+  const [activeDropTarget, setActiveDropTarget] = useState<LayerEditorDropTarget | null>(null);
   const [openLayerMenuLayerId, setOpenLayerMenuLayerId] = useState<string | null>(null);
   const [openGroupMenuGroupId, setOpenGroupMenuGroupId] = useState<string | null>(null);
 
@@ -768,6 +875,63 @@ export function LayerEditorPanel<
     }
   }, [firstTreeItemKey, focusedTreeItemKey, treeItems]);
 
+  const clearDragState = useCallback(() => {
+    setDraggedLayerId(null);
+    setActiveDropTarget(null);
+  }, []);
+
+  const handleLayerSelect = useCallback(
+    (layerId: string, event: MouseEvent<HTMLDivElement>) => {
+      const modifier = event.ctrlKey || event.metaKey;
+
+      if (event.shiftKey) {
+        const anchorLayerId = resolveLayerSelectionAnchor(
+          selectionAnchorLayerId,
+          controller.selection,
+          visibleLayerIds,
+          layerId,
+        );
+        const rangeLayerIds = getLayerSelectionRange(visibleLayerIds, anchorLayerId, layerId);
+        const nextLayerIds = modifier
+          ? mergeLayerSelections(controller.selection.layerIds, rangeLayerIds)
+          : rangeLayerIds;
+
+        setSelectionAnchorLayerId(anchorLayerId);
+        controller.selectLayers(nextLayerIds, layerId);
+        return;
+      }
+
+      if (modifier) {
+        const selected = controller.selection.layerIds.includes(layerId);
+        controller.selectLayer(layerId, true);
+        if (!selected) {
+          setSelectionAnchorLayerId(layerId);
+        }
+        return;
+      }
+
+      setSelectionAnchorLayerId(layerId);
+      controller.selectLayer(layerId);
+    },
+    [controller, selectionAnchorLayerId, visibleLayerIds],
+  );
+
+  const handleGroupDrop = useCallback(
+    (groupId: string | null, targetIndex: number | undefined, event: DragEvent<HTMLElement>) => {
+      if (readOnly || !draggedLayerId) {
+        return;
+      }
+
+      event.preventDefault();
+      const sourceLayerId = event.dataTransfer.getData("text/plain") || draggedLayerId;
+      if (sourceLayerId) {
+        controller.moveLayerToGroup(sourceLayerId, groupId, targetIndex);
+      }
+      clearDragState();
+    },
+    [clearDragState, controller, draggedLayerId, readOnly],
+  );
+
   const handleTreeItemKeyDown = useCallback(
     ({ event, group, kind, layer }: LayerEditorTreeItemKeyboardContext) => {
       if (event.target !== event.currentTarget) {
@@ -776,6 +940,34 @@ export function LayerEditorPanel<
 
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
+        if (kind === "layer" && layer && event.shiftKey) {
+          const offset = event.key === "ArrowDown" ? 1 : -1;
+          const targetLayerId = getRelativeVisibleLayerId(visibleLayerIds, layer.id, offset);
+          if (!targetLayerId) {
+            return;
+          }
+
+          const anchorLayerId = resolveLayerSelectionAnchor(
+            selectionAnchorLayerId,
+            controller.selection,
+            visibleLayerIds,
+            layer.id,
+          );
+          const rangeLayerIds = getLayerSelectionRange(
+            visibleLayerIds,
+            anchorLayerId,
+            targetLayerId,
+          );
+
+          setSelectionAnchorLayerId(anchorLayerId);
+          controller.selectLayers(rangeLayerIds, targetLayerId);
+          focusTreeItem(
+            getTreeItemElement(event.currentTarget, layerTreeItemKey(targetLayerId)) ?? undefined,
+            setFocusedTreeItemKey,
+          );
+          return;
+        }
+
         const offset = event.key === "ArrowDown" ? 1 : -1;
         focusRelativeTreeItem(event.currentTarget, offset, setFocusedTreeItemKey);
         return;
@@ -815,10 +1007,28 @@ export function LayerEditorPanel<
 
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        controller.selectLayer(layer.id, event.shiftKey || event.ctrlKey || event.metaKey);
+        if (event.shiftKey) {
+          const anchorLayerId = resolveLayerSelectionAnchor(
+            selectionAnchorLayerId,
+            controller.selection,
+            visibleLayerIds,
+            layer.id,
+          );
+          const rangeLayerIds = getLayerSelectionRange(visibleLayerIds, anchorLayerId, layer.id);
+          const nextLayerIds =
+            event.ctrlKey || event.metaKey
+              ? mergeLayerSelections(controller.selection.layerIds, rangeLayerIds)
+              : rangeLayerIds;
+          setSelectionAnchorLayerId(anchorLayerId);
+          controller.selectLayers(nextLayerIds, layer.id);
+          return;
+        }
+
+        controller.selectLayer(layer.id, event.ctrlKey || event.metaKey);
+        setSelectionAnchorLayerId(layer.id);
       }
     },
-    [controller, readOnly],
+    [controller, readOnly, selectionAnchorLayerId, visibleLayerIds],
   );
 
   const handlePanelKeyDown = useCallback(
@@ -864,21 +1074,37 @@ export function LayerEditorPanel<
         {resolvedFeatures.toolbar ? (
           <LayerEditorToolbar controller={controller} features={resolvedFeatures} />
         ) : null}
+        {resolvedFeatures.search ? (
+          <LayerEditorSearchField
+            placeholder={filterPlaceholder}
+            query={activeFilterQuery}
+            onQueryChange={setFilterQuery}
+          />
+        ) : null}
         <div aria-multiselectable="true" role="tree">
-          {groups.length === 0 && ungroupedLayers.length === 0 ? (
+          {groups.length === 0 && ungroupedLayers.length === 0 && !hasFilter ? (
             <p className="mb-layer-editor__empty">No layers.</p>
           ) : null}
-          {groups.map((group) => (
+          {hasFilter && !hasMatches ? (
+            <p className="mb-layer-editor__empty">No matching layers.</p>
+          ) : null}
+          {groups.map((renderedGroup) => (
             <LayerEditorGroupRow
-              key={group.id}
+              key={renderedGroup.group.id}
+              activeDropTarget={activeDropTarget}
               controller={controller}
               document={document}
               draggedLayerId={draggedLayerId}
               features={resolvedFeatures}
               firstTreeItemKey={firstTreeItemKey}
               focusedTreeItemKey={focusedTreeItemKey}
-              group={group}
+              group={renderedGroup.group}
+              layers={renderedGroup.layers}
               onDragLayerChange={setDraggedLayerId}
+              onDragStateClear={clearDragState}
+              onDropTargetChange={setActiveDropTarget}
+              onGroupDrop={handleGroupDrop}
+              onLayerSelect={handleLayerSelect}
               onOpenGroupMenuChange={setOpenGroupMenuGroupId}
               onOpenLayerMenuChange={setOpenLayerMenuLayerId}
               onTreeItemFocus={setFocusedTreeItemKey}
@@ -890,6 +1116,7 @@ export function LayerEditorPanel<
               renderLayerActions={renderLayerActions}
               renderLayerLabel={renderLayerLabel}
               renderLayerMeta={renderLayerMeta}
+              showLayers={renderedGroup.forceExpanded || !(renderedGroup.group.collapsed ?? false)}
             />
           ))}
           {ungroupedLayers.map((layer) => (
@@ -903,6 +1130,8 @@ export function LayerEditorPanel<
               focusedTreeItemKey={focusedTreeItemKey}
               layer={layer}
               onDragLayerChange={setDraggedLayerId}
+              onDragStateClear={clearDragState}
+              onLayerSelect={handleLayerSelect}
               onOpenLayerMenuChange={setOpenLayerMenuLayerId}
               onTreeItemFocus={setFocusedTreeItemKey}
               onTreeItemKeyDown={handleTreeItemKeyDown}
@@ -913,6 +1142,13 @@ export function LayerEditorPanel<
               renderLayerMeta={renderLayerMeta}
             />
           ))}
+          {draggedLayerId && !readOnly ? (
+            <LayerEditorRootDropZone
+              active={activeDropTarget?.kind === "root"}
+              onDrop={(event) => handleGroupDrop(null, undefined, event)}
+              onDropTargetChange={setActiveDropTarget}
+            />
+          ) : null}
         </div>
       </div>
     </TooltipProvider>
@@ -924,6 +1160,7 @@ export type LayerEditorGroupRowProps<
   TGroupData = Record<string, unknown>,
   TSourceData = Record<string, unknown>,
 > = {
+  activeDropTarget: LayerEditorDropTarget | null;
   controller: LayerEditorController<TLayerData, TGroupData, TSourceData>;
   document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
   draggedLayerId: string | null;
@@ -931,7 +1168,16 @@ export type LayerEditorGroupRowProps<
   firstTreeItemKey: string | null;
   focusedTreeItemKey: string | null;
   group: LayerEditorGroup<TGroupData>;
+  layers: Array<LayerEditorLayer<TLayerData>>;
   onDragLayerChange: (layerId: string | null) => void;
+  onDragStateClear: () => void;
+  onDropTargetChange: (target: LayerEditorDropTarget | null) => void;
+  onGroupDrop: (
+    groupId: string | null,
+    targetIndex: number | undefined,
+    event: DragEvent<HTMLElement>,
+  ) => void;
+  onLayerSelect: (layerId: string, event: MouseEvent<HTMLDivElement>) => void;
   onOpenGroupMenuChange: (groupId: string | null) => void;
   onOpenLayerMenuChange: (layerId: string | null) => void;
   onTreeItemFocus: (itemKey: string) => void;
@@ -947,6 +1193,7 @@ export type LayerEditorGroupRowProps<
   ) => ReactNode;
   renderLayerLabel?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
   renderLayerMeta?: (layer: LayerEditorLayer<TLayerData>) => ReactNode;
+  showLayers: boolean;
 };
 
 export function LayerEditorGroupRow<
@@ -954,6 +1201,7 @@ export function LayerEditorGroupRow<
   TGroupData = Record<string, unknown>,
   TSourceData = Record<string, unknown>,
 >({
+  activeDropTarget,
   controller,
   document,
   draggedLayerId,
@@ -961,7 +1209,12 @@ export function LayerEditorGroupRow<
   firstTreeItemKey,
   focusedTreeItemKey,
   group,
+  layers,
   onDragLayerChange,
+  onDragStateClear,
+  onDropTargetChange,
+  onGroupDrop,
+  onLayerSelect,
   onOpenGroupMenuChange,
   onOpenLayerMenuChange,
   onTreeItemFocus,
@@ -973,17 +1226,16 @@ export function LayerEditorGroupRow<
   renderLayerActions,
   renderLayerLabel,
   renderLayerMeta,
+  showLayers,
 }: LayerEditorGroupRowProps<TLayerData, TGroupData, TSourceData>) {
-  const layers = group.layerIds
-    .map((layerId) => document.layers.find((layer) => layer.id === layerId))
-    .filter((layer): layer is LayerEditorLayer<TLayerData> => Boolean(layer));
   const rowRef = useRef<HTMLDivElement>(null);
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const itemKey = groupTreeItemKey(group.id);
-  const collapsed = group.collapsed ?? false;
+  const expanded = showLayers;
   const visible = group.visible ?? true;
   const locked = group.locked ?? false;
   const groupMenuOpen = openGroupMenuGroupId === group.id;
+  const groupDropActive = activeDropTarget?.kind === "group" && activeDropTarget.id === group.id;
 
   const beginRename = () => {
     if (!readOnly) {
@@ -1004,14 +1256,27 @@ export function LayerEditorGroupRow<
   };
 
   return (
-    <Collapsible className="mb-layer-editor__group" open={!collapsed}>
+    <Collapsible className="mb-layer-editor__group" open={expanded}>
       <div
         ref={rowRef}
-        aria-expanded={!collapsed}
-        className="mb-layer-editor__group-header"
+        aria-expanded={expanded}
+        className={joinClassNames(
+          "mb-layer-editor__group-header",
+          groupDropActive && "mb-layer-editor__group-header--drop-inside",
+        )}
         data-layer-editor-tree-item-key={itemKey}
         role="treeitem"
         tabIndex={treeItemTabIndex(itemKey, focusedTreeItemKey, firstTreeItemKey)}
+        onDragLeave={() => onDropTargetChange(null)}
+        onDragOver={(event) => {
+          if (readOnly || !draggedLayerId) {
+            return;
+          }
+
+          event.preventDefault();
+          onDropTargetChange({ id: group.id, kind: "group" });
+        }}
+        onDrop={(event) => onGroupDrop(group.id, undefined, event)}
         onFocus={() => onTreeItemFocus(itemKey)}
         onKeyDown={(event) => {
           if (event.key === "F2" && event.target === event.currentTarget && !readOnly) {
@@ -1027,7 +1292,7 @@ export function LayerEditorGroupRow<
           <TooltipTrigger asChild>
             <CollapsibleTrigger asChild>
               <Button
-                aria-label={`${collapsed ? "Expand" : "Collapse"} ${group.label}`}
+                aria-label={`${expanded ? "Collapse" : "Expand"} ${group.label}`}
                 className="mb-layer-editor__icon-button"
                 disabled={readOnly}
                 size="icon-sm"
@@ -1038,15 +1303,15 @@ export function LayerEditorGroupRow<
                   controller.toggleGroupCollapsed(group.id);
                 }}
               >
-                {collapsed ? (
-                  <ChevronUp aria-hidden="true" size={16} />
-                ) : (
+                {expanded ? (
                   <ChevronDown aria-hidden="true" size={16} />
+                ) : (
+                  <ChevronUp aria-hidden="true" size={16} />
                 )}
               </Button>
             </CollapsibleTrigger>
           </TooltipTrigger>
-          <TooltipContent>{collapsed ? "Expand group" : "Collapse group"}</TooltipContent>
+          <TooltipContent>{expanded ? "Collapse group" : "Expand group"}</TooltipContent>
         </Tooltip>
         {editingLabel === null ? (
           <span className="mb-layer-editor__group-label" onDoubleClick={beginRename}>
@@ -1171,29 +1436,37 @@ export function LayerEditorGroupRow<
         className="mb-layer-editor__group-layers"
         role="group"
       >
-        {collapsed
-          ? null
-          : layers.map((layer) => (
-              <LayerEditorLayerRow
-                key={layer.id}
-                controller={controller}
-                document={document}
-                draggedLayerId={draggedLayerId}
-                features={features}
-                firstTreeItemKey={firstTreeItemKey}
-                focusedTreeItemKey={focusedTreeItemKey}
-                layer={layer}
-                onDragLayerChange={onDragLayerChange}
-                onOpenLayerMenuChange={onOpenLayerMenuChange}
-                onTreeItemFocus={onTreeItemFocus}
-                onTreeItemKeyDown={onTreeItemKeyDown}
-                openLayerMenuLayerId={openLayerMenuLayerId}
-                readOnly={readOnly}
-                renderLayerActions={renderLayerActions}
-                renderLayerLabel={renderLayerLabel}
-                renderLayerMeta={renderLayerMeta}
-              />
-            ))}
+        {layers.map((layer) => (
+          <LayerEditorLayerRow
+            key={layer.id}
+            controller={controller}
+            document={document}
+            draggedLayerId={draggedLayerId}
+            features={features}
+            firstTreeItemKey={firstTreeItemKey}
+            focusedTreeItemKey={focusedTreeItemKey}
+            layer={layer}
+            onDragLayerChange={onDragLayerChange}
+            onDragStateClear={onDragStateClear}
+            onLayerSelect={onLayerSelect}
+            onOpenLayerMenuChange={onOpenLayerMenuChange}
+            onTreeItemFocus={onTreeItemFocus}
+            onTreeItemKeyDown={onTreeItemKeyDown}
+            openLayerMenuLayerId={openLayerMenuLayerId}
+            readOnly={readOnly}
+            renderLayerActions={renderLayerActions}
+            renderLayerLabel={renderLayerLabel}
+            renderLayerMeta={renderLayerMeta}
+          />
+        ))}
+        {layers.length === 0 && draggedLayerId && !readOnly ? (
+          <LayerEditorGroupDropZone
+            active={groupDropActive}
+            group={group}
+            onDrop={(event) => onGroupDrop(group.id, 0, event)}
+            onDropTargetChange={onDropTargetChange}
+          />
+        ) : null}
       </CollapsibleContent>
     </Collapsible>
   );
@@ -1212,6 +1485,8 @@ export type LayerEditorLayerRowProps<
   focusedTreeItemKey: string | null;
   layer: LayerEditorLayer<TLayerData>;
   onDragLayerChange: (layerId: string | null) => void;
+  onDragStateClear: () => void;
+  onLayerSelect: (layerId: string, event: MouseEvent<HTMLDivElement>) => void;
   onOpenLayerMenuChange: (layerId: string | null) => void;
   onTreeItemFocus: (itemKey: string) => void;
   onTreeItemKeyDown: (context: LayerEditorTreeItemKeyboardContext) => void;
@@ -1237,6 +1512,8 @@ export function LayerEditorLayerRow<
   focusedTreeItemKey,
   layer,
   onDragLayerChange,
+  onDragStateClear,
+  onLayerSelect,
   onOpenLayerMenuChange,
   onTreeItemFocus,
   onTreeItemKeyDown,
@@ -1263,7 +1540,7 @@ export function LayerEditorLayerRow<
   };
 
   const handleSelect = (event: MouseEvent<HTMLDivElement>) => {
-    controller.selectLayer(layer.id, event.shiftKey || event.ctrlKey || event.metaKey);
+    onLayerSelect(layer.id, event);
   };
 
   const commitLabelEdit = () => {
@@ -1321,7 +1598,7 @@ export function LayerEditorLayerRow<
       tabIndex={treeItemTabIndex(itemKey, focusedTreeItemKey, firstTreeItemKey)}
       onClick={handleSelect}
       onDragEnd={() => {
-        onDragLayerChange(null);
+        onDragStateClear();
         setDropPosition(null);
       }}
       onDragLeave={() => setDropPosition(null)}
@@ -1346,7 +1623,7 @@ export function LayerEditorLayerRow<
         if (sourceLayerId) {
           controller.moveLayerRelativeTo(sourceLayerId, layer.id, dropPosition);
         }
-        onDragLayerChange(null);
+        onDragStateClear();
         setDropPosition(null);
       }}
       onDoubleClick={beginRename}
@@ -1617,6 +1894,102 @@ function LayerEditorToolbar<
   );
 }
 
+function LayerEditorSearchField({
+  placeholder,
+  query,
+  onQueryChange,
+}: {
+  placeholder: string;
+  query: string;
+  onQueryChange: (query: string) => void;
+}) {
+  return (
+    <div className="mb-layer-editor__search">
+      <Search aria-hidden="true" className="mb-layer-editor__search-icon" size={16} />
+      <Input
+        aria-label={placeholder}
+        className="mb-layer-editor__search-input"
+        placeholder={placeholder}
+        type="search"
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+      />
+      {query ? (
+        <Button
+          aria-label="Clear layer search"
+          className="mb-layer-editor__search-clear"
+          size="icon-sm"
+          type="button"
+          variant="ghost"
+          onClick={() => onQueryChange("")}
+        >
+          <X aria-hidden="true" size={14} />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function LayerEditorGroupDropZone<TGroupData = Record<string, unknown>>({
+  active,
+  group,
+  onDrop,
+  onDropTargetChange,
+}: {
+  active: boolean;
+  group: LayerEditorGroup<TGroupData>;
+  onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  onDropTargetChange: (target: LayerEditorDropTarget | null) => void;
+}) {
+  return (
+    <div
+      aria-label={`Drop layer into ${group.label}`}
+      className={joinClassNames(
+        "mb-layer-editor__drop-zone",
+        active && "mb-layer-editor__drop-zone--active",
+      )}
+      role="presentation"
+      onDragLeave={() => onDropTargetChange(null)}
+      onDragOver={(event) => {
+        event.preventDefault();
+        onDropTargetChange({ id: group.id, kind: "group" });
+      }}
+      onDrop={onDrop}
+    >
+      Drop layer into group
+    </div>
+  );
+}
+
+function LayerEditorRootDropZone({
+  active,
+  onDrop,
+  onDropTargetChange,
+}: {
+  active: boolean;
+  onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  onDropTargetChange: (target: LayerEditorDropTarget | null) => void;
+}) {
+  return (
+    <div
+      aria-label="Drop layer at root"
+      className={joinClassNames(
+        "mb-layer-editor__drop-zone",
+        active && "mb-layer-editor__drop-zone--active",
+      )}
+      role="presentation"
+      onDragLeave={() => onDropTargetChange(null)}
+      onDragOver={(event) => {
+        event.preventDefault();
+        onDropTargetChange({ id: null, kind: "root" });
+      }}
+      onDrop={onDrop}
+    >
+      Drop layer outside groups
+    </div>
+  );
+}
+
 function IconButton({
   children,
   disabled,
@@ -1659,6 +2032,7 @@ function resolveLayerEditorPanelFeatures(
     historyControls: (features?.historyControls ?? false) && hasHistoryHandlers,
     keyboardCommands: features?.keyboardCommands ?? true,
     layerMenus: features?.layerMenus ?? true,
+    search: features?.search ?? false,
     toolbar: features?.toolbar ?? true,
   };
 }
@@ -1673,31 +2047,223 @@ function isEditableKeyboardTarget(target: EventTarget) {
   );
 }
 
-function getVisibleTreeItems(
-  document: LayerEditorDocument<unknown, unknown, unknown>,
-  groupedLayerIds: ReadonlySet<string>,
-): LayerEditorTreeItem[] {
+function getFilteredLayerEditorTree<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>({
+  document,
+  filterGroup,
+  filterLayer,
+  query,
+}: {
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
+  filterGroup?: (
+    context: LayerEditorGroupFilterContext<TLayerData, TGroupData, TSourceData>,
+  ) => boolean;
+  filterLayer?: (
+    context: LayerEditorLayerFilterContext<TLayerData, TGroupData, TSourceData>,
+  ) => boolean;
+  query: string;
+}): LayerEditorRenderedTree<TLayerData, TGroupData> {
+  const normalizedQuery = normalizeLayerEditorFilterQuery(query);
+  const hasFilter = normalizedQuery.length > 0;
   const items: LayerEditorTreeItem[] = [];
+  const visibleLayerIds: string[] = [];
+  const layerById = new Map(document.layers.map((layer) => [layer.id, layer]));
+  const sourcesById = new Map((document.sources ?? []).map((source) => [source.id, source]));
+  const groupedLayerIds = new Set<string>();
+  const renderedGroups: Array<LayerEditorRenderedGroup<TLayerData, TGroupData>> = [];
 
   for (const group of document.groups ?? []) {
-    items.push({ id: group.id, kind: "group", key: groupTreeItemKey(group.id) });
+    const groupLayers = group.layerIds
+      .map((layerId) => layerById.get(layerId))
+      .filter((layer): layer is LayerEditorLayer<TLayerData> => Boolean(layer));
+    for (const layer of groupLayers) {
+      groupedLayerIds.add(layer.id);
+    }
 
-    if (!group.collapsed) {
-      for (const layerId of group.layerIds) {
-        if (document.layers.some((layer) => layer.id === layerId)) {
-          items.push({ id: layerId, kind: "layer", key: layerTreeItemKey(layerId) });
+    if (!hasFilter) {
+      renderedGroups.push({
+        forceExpanded: false,
+        group,
+        layers: group.collapsed ? [] : groupLayers,
+      });
+      items.push({ id: group.id, kind: "group", key: groupTreeItemKey(group.id) });
+      if (!group.collapsed) {
+        for (const layer of groupLayers) {
+          items.push({ id: layer.id, kind: "layer", key: layerTreeItemKey(layer.id) });
+          visibleLayerIds.push(layer.id);
         }
+      }
+      continue;
+    }
+
+    const groupMatches =
+      filterGroup?.({ document, group, query: normalizedQuery }) ??
+      defaultGroupMatchesFilter(group, normalizedQuery);
+    const matchingLayers = groupMatches
+      ? groupLayers
+      : groupLayers.filter((layer) =>
+          layerMatchesFilter({
+            document,
+            filterLayer,
+            layer,
+            query: normalizedQuery,
+            source: layer.sourceId ? (sourcesById.get(layer.sourceId) ?? null) : null,
+          }),
+        );
+
+    if (groupMatches || matchingLayers.length > 0) {
+      renderedGroups.push({
+        forceExpanded: true,
+        group,
+        layers: matchingLayers,
+      });
+      items.push({ id: group.id, kind: "group", key: groupTreeItemKey(group.id) });
+      for (const layer of matchingLayers) {
+        items.push({ id: layer.id, kind: "layer", key: layerTreeItemKey(layer.id) });
+        visibleLayerIds.push(layer.id);
       }
     }
   }
 
-  for (const layer of document.layers) {
-    if (!groupedLayerIds.has(layer.id)) {
-      items.push({ id: layer.id, kind: "layer", key: layerTreeItemKey(layer.id) });
+  const ungroupedLayers = document.layers.filter((layer) => {
+    if (groupedLayerIds.has(layer.id)) {
+      return false;
+    }
+
+    if (!hasFilter) {
+      return true;
+    }
+
+    return layerMatchesFilter({
+      document,
+      filterLayer,
+      layer,
+      query: normalizedQuery,
+      source: layer.sourceId ? (sourcesById.get(layer.sourceId) ?? null) : null,
+    });
+  });
+
+  for (const layer of ungroupedLayers) {
+    items.push({ id: layer.id, kind: "layer", key: layerTreeItemKey(layer.id) });
+    visibleLayerIds.push(layer.id);
+  }
+
+  return {
+    groups: renderedGroups,
+    hasFilter,
+    hasMatches: renderedGroups.length > 0 || ungroupedLayers.length > 0,
+    treeItems: items,
+    ungroupedLayers,
+    visibleLayerIds,
+  };
+}
+
+function layerMatchesFilter<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>({
+  document,
+  filterLayer,
+  layer,
+  query,
+  source,
+}: {
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
+  filterLayer?: (
+    context: LayerEditorLayerFilterContext<TLayerData, TGroupData, TSourceData>,
+  ) => boolean;
+  layer: LayerEditorLayer<TLayerData>;
+  query: string;
+  source: LayerEditorSource<TSourceData> | null;
+}) {
+  return (
+    filterLayer?.({ document, layer, query, source }) ??
+    defaultLayerMatchesFilter(layer, source, query)
+  );
+}
+
+function normalizeLayerEditorFilterQuery(query: string) {
+  return query.trim().toLowerCase();
+}
+
+function defaultLayerMatchesFilter<TLayerData, TSourceData>(
+  layer: LayerEditorLayer<TLayerData>,
+  source: LayerEditorSource<TSourceData> | null,
+  query: string,
+) {
+  return [layer.id, layer.kind, layer.label, source?.id, source?.kind, source?.label].some(
+    (value) => value?.toLowerCase().includes(query),
+  );
+}
+
+function defaultGroupMatchesFilter<TGroupData>(group: LayerEditorGroup<TGroupData>, query: string) {
+  return [group.id, group.label].some((value) => value.toLowerCase().includes(query));
+}
+
+function resolveLayerSelectionAnchor(
+  anchorLayerId: string | null,
+  selection: LayerEditorSelection,
+  visibleLayerIds: readonly string[],
+  targetLayerId: string,
+) {
+  if (anchorLayerId && visibleLayerIds.includes(anchorLayerId)) {
+    return anchorLayerId;
+  }
+
+  if (selection.primaryLayerId && visibleLayerIds.includes(selection.primaryLayerId)) {
+    return selection.primaryLayerId;
+  }
+
+  return targetLayerId;
+}
+
+function getLayerSelectionRange(
+  visibleLayerIds: readonly string[],
+  anchorLayerId: string,
+  targetLayerId: string,
+) {
+  const anchorIndex = visibleLayerIds.indexOf(anchorLayerId);
+  const targetIndex = visibleLayerIds.indexOf(targetLayerId);
+  if (anchorIndex < 0 || targetIndex < 0) {
+    return [targetLayerId];
+  }
+
+  const start = Math.min(anchorIndex, targetIndex);
+  const end = Math.max(anchorIndex, targetIndex);
+  return visibleLayerIds.slice(start, end + 1);
+}
+
+function mergeLayerSelections(
+  existingLayerIds: readonly string[],
+  rangeLayerIds: readonly string[],
+) {
+  const nextLayerIds = [...existingLayerIds];
+  const seenLayerIds = new Set(nextLayerIds);
+  for (const layerId of rangeLayerIds) {
+    if (!seenLayerIds.has(layerId)) {
+      seenLayerIds.add(layerId);
+      nextLayerIds.push(layerId);
     }
   }
 
-  return items;
+  return nextLayerIds;
+}
+
+function getRelativeVisibleLayerId(
+  visibleLayerIds: readonly string[],
+  layerId: string,
+  offset: number,
+) {
+  const index = visibleLayerIds.indexOf(layerId);
+  if (index < 0) {
+    return null;
+  }
+
+  return visibleLayerIds[Math.min(visibleLayerIds.length - 1, Math.max(0, index + offset))] ?? null;
 }
 
 function focusRelativeTreeItem(
@@ -1730,6 +2296,11 @@ function focusTreeItem(item: HTMLElement | undefined, onTreeItemFocus: (itemKey:
     onTreeItemFocus(itemKey);
   }
   item.focus();
+}
+
+function getTreeItemElement(currentItem: HTMLElement, itemKey: string) {
+  const tree = currentItem.closest('[role="tree"]');
+  return tree?.querySelector<HTMLElement>(`[data-layer-editor-tree-item-key="${itemKey}"]`);
 }
 
 function getTreeItemElements(currentItem: HTMLElement) {
