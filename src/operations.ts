@@ -1,4 +1,17 @@
 import {
+  createEditorEntityDocument,
+  createEditorEntitySelection,
+  createEditorViewportState,
+  getEditorSelectedEntityIds,
+  getEditorSelectionPrimaryEntityId,
+  isEditorRecord,
+  normalizeEditorSelection,
+  type EditorEntityBase,
+  type EditorEntityDocument,
+  type EditorLayerAdapter,
+} from "@moritzbrantner/editor-core";
+
+import {
   defaultLayerEditorViewport,
   layerEditorBlendModes,
   type LayerEditorAddLayerOptions,
@@ -13,6 +26,19 @@ import {
   type LayerEditorSelection,
   type LayerEditorSource,
 } from "./types";
+
+export type LayerEditorEntity<TData = Record<string, unknown>> = EditorEntityBase & {
+  label: string;
+  layer: LayerEditorLayer<TData>;
+};
+
+export const layerEditorLayerAdapter: EditorLayerAdapter<LayerEditorEntity> = {
+  getBounds: (entity) => entity.layer.bounds,
+  getParentId: (entity) => entity.parentId,
+  getOrder: (entity) => entity.order,
+  isLocked: (entity) => entity.layer.locked ?? false,
+  isVisible: (entity) => entity.layer.visible ?? true,
+};
 
 export class LayerEditorDocumentValidationError extends Error {
   diagnostics: LayerEditorDocumentDiagnostic[];
@@ -343,27 +369,47 @@ export function assertLayerEditorDocument(
   }
 }
 
+export function createLayerEditorEntityDocument<TLayerData = Record<string, unknown>>(
+  document: LayerEditorDocument<TLayerData, unknown, unknown>,
+): EditorEntityDocument<LayerEditorEntity<TLayerData>> {
+  return createEditorEntityDocument(
+    document.layers.map((layer, index) => ({
+      id: layer.id,
+      label: layer.label,
+      layer,
+      metadata: {
+        blendMode: layer.blendMode ?? "normal",
+        kind: layer.kind,
+        opacity: layer.opacity ?? 1,
+      },
+      order: index,
+      parentId: layer.parentGroupId ?? null,
+      type: layer.kind,
+    })),
+  );
+}
+
 export function normalizeLayerEditorSelection(
   document: LayerEditorDocument<unknown, unknown, unknown>,
   selection: LayerEditorSelection,
 ): LayerEditorSelection {
   const layerIds = new Set(document.layers.map((layer) => layer.id));
   const groupIds = new Set(document.groups?.map((group) => group.id) ?? []);
-  const selectedLayerIds = selection.layerIds.filter(
-    (layerId, index) => layerIds.has(layerId) && selection.layerIds.indexOf(layerId) === index,
+  const normalizedLayerSelection = normalizeEditorSelection(
+    createEditorEntitySelection(selection.layerIds, selection.primaryLayerId ?? undefined),
+    (id) => layerIds.has(id),
   );
-  const selectedGroupIds = selection.groupIds?.filter(
-    (groupId, index) => groupIds.has(groupId) && selection.groupIds?.indexOf(groupId) === index,
+  const normalizedGroupSelection = normalizeEditorSelection(
+    createEditorEntitySelection(selection.groupIds ?? []),
+    (id) => groupIds.has(id),
   );
-  const primaryLayerId =
-    selection.primaryLayerId && selectedLayerIds.includes(selection.primaryLayerId)
-      ? selection.primaryLayerId
-      : (selectedLayerIds[0] ?? null);
+  const selectedLayerIds = getEditorSelectedEntityIds(normalizedLayerSelection);
+  const selectedGroupIds = getEditorSelectedEntityIds(normalizedGroupSelection);
 
   return {
     layerIds: selectedLayerIds,
     groupIds: selectedGroupIds && selectedGroupIds.length > 0 ? selectedGroupIds : undefined,
-    primaryLayerId,
+    primaryLayerId: getEditorSelectionPrimaryEntityId(normalizedLayerSelection),
   };
 }
 
@@ -784,11 +830,11 @@ function normalizeViewport(viewport: unknown) {
     return defaultLayerEditorViewport;
   }
 
-  return {
+  return createEditorViewportState({
     x: finiteOr(viewport.x, 0),
     y: finiteOr(viewport.y, 0),
     zoom: Math.max(Number.EPSILON, finiteOr(viewport.zoom, 1)),
-  };
+  });
 }
 
 function isLayerLike(value: unknown): value is LayerEditorLayer {
@@ -847,7 +893,7 @@ function isValidViewport(value: unknown) {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return isEditorRecord(value);
 }
 
 function isFiniteNumber(value: unknown): value is number {

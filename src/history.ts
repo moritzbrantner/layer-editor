@@ -1,3 +1,15 @@
+import {
+  canRedoEditorHistory,
+  canUndoEditorHistory,
+  commitEditorSnapshotHistory,
+  createEditorSnapshotHistory,
+  createStableEditorJsonEquals,
+  redoEditorSnapshotHistory,
+  resetEditorSnapshotHistory,
+  undoEditorSnapshotHistory,
+  type EditorSnapshotHistory,
+} from "@moritzbrantner/editor-core";
+
 import { normalizeLayerEditorDocument, type LayerEditorDocument } from "./core";
 
 export const defaultLayerEditorHistoryLimit = 100;
@@ -6,11 +18,7 @@ export type LayerEditorHistoryState<
   TLayerData = Record<string, unknown>,
   TGroupData = Record<string, unknown>,
   TSourceData = Record<string, unknown>,
-> = {
-  past: Array<LayerEditorDocument<TLayerData, TGroupData, TSourceData>>;
-  present: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
-  future: Array<LayerEditorDocument<TLayerData, TGroupData, TSourceData>>;
-};
+> = EditorSnapshotHistory<LayerEditorDocument<TLayerData, TGroupData, TSourceData>>;
 
 export type LayerEditorHistoryOptions = {
   limit?: number;
@@ -23,11 +31,9 @@ export function createLayerEditorHistory<
 >(
   document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
 ): LayerEditorHistoryState<TLayerData, TGroupData, TSourceData> {
-  return {
-    future: [],
-    past: [],
-    present: normalizeLayerEditorDocument(document),
-  };
+  return createEditorSnapshotHistory(document, {
+    normalize: normalizeLayerEditorDocument,
+  });
 }
 
 export function commitLayerEditorHistory<
@@ -40,16 +46,16 @@ export function commitLayerEditorHistory<
   options: LayerEditorHistoryOptions = {},
 ): LayerEditorHistoryState<TLayerData, TGroupData, TSourceData> {
   const nextDocument = normalizeLayerEditorDocument(document);
-  if (documentsEqual(history.present, nextDocument)) {
+  const equals =
+    createStableEditorJsonEquals<LayerEditorDocument<TLayerData, TGroupData, TSourceData>>();
+  if (equals(history.present, nextDocument)) {
     return history;
   }
 
-  const limit = Math.max(1, Math.trunc(options.limit ?? defaultLayerEditorHistoryLimit));
-  return {
-    future: [],
-    past: [...history.past, history.present].slice(-limit),
-    present: nextDocument,
-  };
+  return commitEditorSnapshotHistory(history, nextDocument, {
+    equals,
+    limit: normalizeLayerEditorHistoryLimit(options.limit),
+  });
 }
 
 export function undoLayerEditorHistory<
@@ -59,16 +65,7 @@ export function undoLayerEditorHistory<
 >(
   history: LayerEditorHistoryState<TLayerData, TGroupData, TSourceData>,
 ): LayerEditorHistoryState<TLayerData, TGroupData, TSourceData> {
-  const previous = history.past.at(-1);
-  if (!previous) {
-    return history;
-  }
-
-  return {
-    future: [history.present, ...history.future],
-    past: history.past.slice(0, -1),
-    present: previous,
-  };
+  return undoEditorSnapshotHistory(history);
 }
 
 export function redoLayerEditorHistory<
@@ -78,16 +75,7 @@ export function redoLayerEditorHistory<
 >(
   history: LayerEditorHistoryState<TLayerData, TGroupData, TSourceData>,
 ): LayerEditorHistoryState<TLayerData, TGroupData, TSourceData> {
-  const next = history.future[0];
-  if (!next) {
-    return history;
-  }
-
-  return {
-    future: history.future.slice(1),
-    past: [...history.past, history.present],
-    present: next,
-  };
+  return redoEditorSnapshotHistory(history);
 }
 
 export function resetLayerEditorHistory<
@@ -97,7 +85,9 @@ export function resetLayerEditorHistory<
 >(
   document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
 ): LayerEditorHistoryState<TLayerData, TGroupData, TSourceData> {
-  return createLayerEditorHistory(document);
+  return resetEditorSnapshotHistory(document, {
+    normalize: normalizeLayerEditorDocument,
+  });
 }
 
 export function canUndoLayerEditorHistory<
@@ -105,7 +95,7 @@ export function canUndoLayerEditorHistory<
   TGroupData = Record<string, unknown>,
   TSourceData = Record<string, unknown>,
 >(history: LayerEditorHistoryState<TLayerData, TGroupData, TSourceData>) {
-  return history.past.length > 0;
+  return canUndoEditorHistory(history);
 }
 
 export function canRedoLayerEditorHistory<
@@ -113,40 +103,9 @@ export function canRedoLayerEditorHistory<
   TGroupData = Record<string, unknown>,
   TSourceData = Record<string, unknown>,
 >(history: LayerEditorHistoryState<TLayerData, TGroupData, TSourceData>) {
-  return history.future.length > 0;
+  return canRedoEditorHistory(history);
 }
 
-function documentsEqual<
-  TLayerData = Record<string, unknown>,
-  TGroupData = Record<string, unknown>,
-  TSourceData = Record<string, unknown>,
->(
-  left: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
-  right: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
-) {
-  return stableLayerEditorDocumentFingerprint(left) === stableLayerEditorDocumentFingerprint(right);
-}
-
-function stableLayerEditorDocumentFingerprint(value: unknown): string {
-  return JSON.stringify(sortLayerEditorDocumentValue(value));
-}
-
-function sortLayerEditorDocumentValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortLayerEditorDocumentValue);
-  }
-
-  if (!isRecord(value)) {
-    return value;
-  }
-
-  return Object.fromEntries(
-    Object.keys(value)
-      .sort()
-      .map((key) => [key, sortLayerEditorDocumentValue(value[key])]),
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+function normalizeLayerEditorHistoryLimit(limit: number | undefined) {
+  return Math.max(1, Math.trunc(limit ?? defaultLayerEditorHistoryLimit));
 }

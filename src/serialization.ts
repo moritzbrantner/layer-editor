@@ -1,4 +1,16 @@
 import {
+  EditorJsonParseError,
+  EditorMigrationError,
+  isEditorRecord,
+  migrateEditorDocument,
+  readEditorDocument,
+  serializeEditorDocument,
+  type EditorDocumentAdapter,
+  type EditorDocumentMigrations,
+  type SerializedEditorDocument,
+} from "@moritzbrantner/editor-core";
+
+import {
   normalizeLayerEditorDocument,
   validateLayerEditorDocument,
   layerEditorBlendModes,
@@ -13,11 +25,11 @@ export type SerializedLayerEditorDocument<
   TLayerData = Record<string, unknown>,
   TGroupData = Record<string, unknown>,
   TSourceData = Record<string, unknown>,
-> = {
-  format: typeof layerEditorDocumentFormat;
-  schemaVersion: typeof currentLayerEditorSchemaVersion;
-  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
-};
+> = SerializedEditorDocument<
+  LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+  typeof layerEditorDocumentFormat,
+  typeof currentLayerEditorSchemaVersion
+>;
 
 export type LayerEditorParseIssueCode =
   | "invalid-input"
@@ -48,6 +60,16 @@ export class LayerEditorParseError extends Error {
   }
 }
 
+export const layerEditorDocumentAdapter: EditorDocumentAdapter<LayerEditorDocument> & {
+  format: typeof layerEditorDocumentFormat;
+  schemaVersion: typeof currentLayerEditorSchemaVersion;
+} = {
+  format: layerEditorDocumentFormat,
+  normalize: normalizeLayerEditorDocument,
+  read: readValidatedLayerEditorDocument,
+  schemaVersion: currentLayerEditorSchemaVersion,
+};
+
 export function serializeLayerEditorDocument<
   TLayerData = Record<string, unknown>,
   TGroupData = Record<string, unknown>,
@@ -55,31 +77,35 @@ export function serializeLayerEditorDocument<
 >(
   document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
 ): SerializedLayerEditorDocument<TLayerData, TGroupData, TSourceData> {
-  return {
-    document: normalizeLayerEditorDocument(document),
-    format: layerEditorDocumentFormat,
-    schemaVersion: currentLayerEditorSchemaVersion,
-  };
+  return serializeEditorDocument(
+    document,
+    layerEditorDocumentAdapter as EditorDocumentAdapter<
+      LayerEditorDocument<TLayerData, TGroupData, TSourceData>
+    > & {
+      format: typeof layerEditorDocumentFormat;
+      schemaVersion: typeof currentLayerEditorSchemaVersion;
+    },
+    { exportedAt: false },
+  );
 }
 
 export function parseLayerEditorDocument(
   input: unknown,
   options: LayerEditorParseOptions = {},
 ): LayerEditorDocument {
-  const document = readLayerEditorDocument(input, "", options);
-  const diagnostics = validateLayerEditorDocument(document);
-
-  if (diagnostics.length > 0) {
-    throw new LayerEditorParseError(
-      diagnostics.map((diagnostic) => ({
-        code: "invalid-document",
-        message: diagnostic.message,
-        path: diagnostic.path,
-      })),
-    );
+  if (!isRecord(input)) {
+    throwParseError("invalid-input", "", "Expected an object.");
   }
 
-  return normalizeLayerEditorDocument(document);
+  assertValidSerializedLayerEditorEnvelope(input, "", options);
+
+  try {
+    return readEditorDocument(input, layerEditorDocumentAdapter, {
+      migrations: createEditorCoreMigrations(options),
+    });
+  } catch (error) {
+    throw normalizeLayerEditorParseError(error);
+  }
 }
 
 export function readLayerEditorDocument(
@@ -93,6 +119,27 @@ export function readLayerEditorDocument(
 
   const maybeSerialized = resolveSerializedDocument(input, path, options);
 
+  return readLayerEditorDocumentInput(maybeSerialized, path);
+}
+
+function readValidatedLayerEditorDocument(input: unknown, path = ""): LayerEditorDocument {
+  const document = readLayerEditorDocumentInput(input, path);
+  const diagnostics = validateLayerEditorDocument(document);
+
+  if (diagnostics.length > 0) {
+    throw new EditorJsonParseError(
+      diagnostics.map((diagnostic) => ({
+        message: diagnostic.message,
+        path: diagnostic.path,
+      })),
+    );
+  }
+
+  return document;
+}
+
+function readLayerEditorDocumentInput(input: unknown, path: string): LayerEditorDocument {
+  const maybeSerialized = input;
   if (!isRecord(maybeSerialized)) {
     throwParseError("invalid-document", path, "Expected document object.");
   }
@@ -279,6 +326,34 @@ function resolveSerializedDocument(
     return input;
   }
 
+  assertValidSerializedLayerEditorEnvelope(input, path, options);
+
+  try {
+    const migrated = migrateEditorDocument(
+      input,
+      layerEditorDocumentAdapter,
+      createEditorCoreMigrations(options),
+    );
+
+    if (isRecord(migrated) && migrated.format === layerEditorDocumentFormat) {
+      return migrated.document;
+    }
+
+    return migrated;
+  } catch (error) {
+    throw normalizeLayerEditorParseError(error);
+  }
+}
+
+function assertValidSerializedLayerEditorEnvelope(
+  input: unknown,
+  path: string,
+  options: LayerEditorParseOptions,
+) {
+  if (!isRecord(input) || input.format !== layerEditorDocumentFormat) {
+    return;
+  }
+
   if (!("schemaVersion" in input)) {
     throwParseError(
       "invalid-schema-version",
@@ -300,19 +375,65 @@ function resolveSerializedDocument(
   }
 
   if (input.schemaVersion === currentLayerEditorSchemaVersion) {
-    return input.document;
+    return;
   }
 
-  const migrate = options.migrations?.[input.schemaVersion];
-  if (!migrate) {
+  if (!options.migrations?.[input.schemaVersion]) {
     throwParseError(
       "unsupported-schema-version",
       withPath(path, "schemaVersion"),
       `Unsupported schema version ${input.schemaVersion}.`,
     );
   }
+}
 
-  return migrate(input.document);
+function createEditorCoreMigrations(
+  options: LayerEditorParseOptions,
+): EditorDocumentMigrations<LayerEditorDocument> {
+  return Object.fromEntries(
+    Object.entries(options.migrations ?? {}).flatMap(([schemaVersion, migrate]) =>
+      migrate
+        ? [
+            [
+              schemaVersion,
+              (input: SerializedEditorDocument<unknown>) => ({
+                document: migrate(input.document),
+                format: layerEditorDocumentFormat,
+                schemaVersion: currentLayerEditorSchemaVersion,
+              }),
+            ],
+          ]
+        : [],
+    ),
+  );
+}
+
+function normalizeLayerEditorParseError(error: unknown): LayerEditorParseError {
+  if (error instanceof LayerEditorParseError) {
+    return error;
+  }
+
+  if (error instanceof EditorJsonParseError) {
+    return new LayerEditorParseError(
+      error.issues.map((issue) => ({
+        code: "invalid-document",
+        message: issue.message,
+        path: issue.path,
+      })),
+    );
+  }
+
+  if (error instanceof EditorMigrationError) {
+    return new LayerEditorParseError([
+      {
+        code: "unsupported-schema-version",
+        message: error.message,
+        path: "schemaVersion",
+      },
+    ]);
+  }
+
+  throw error;
 }
 
 function throwParseError(code: LayerEditorParseIssueCode, path: string, message: string): never {
@@ -320,5 +441,5 @@ function throwParseError(code: LayerEditorParseIssueCode, path: string, message:
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return isEditorRecord(value);
 }

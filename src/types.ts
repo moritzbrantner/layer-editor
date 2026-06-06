@@ -1,3 +1,5 @@
+import type { EditorBounds, EditorViewportState } from "@moritzbrantner/editor-core";
+
 export type LayerEditorLayerKind = string;
 
 export type LayerEditorBlendMode =
@@ -29,11 +31,7 @@ export const layerEditorBlendModes = [
   "exclusion",
 ] as const satisfies readonly LayerEditorBlendMode[];
 
-export type LayerEditorBounds = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+export type LayerEditorBounds = EditorBounds & {
   rotation?: number;
 };
 
@@ -69,11 +67,7 @@ export type LayerEditorGroup<TGroupData = Record<string, unknown>> = {
   data?: TGroupData;
 };
 
-export type LayerEditorViewport = {
-  x: number;
-  y: number;
-  zoom: number;
-};
+export type LayerEditorViewport = EditorViewportState;
 
 export type LayerEditorDocument<
   TLayerData = Record<string, unknown>,
