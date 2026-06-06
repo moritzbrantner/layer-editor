@@ -6,6 +6,7 @@ import {
   duplicateLayerEditorLayer,
   LayerEditorDocumentValidationError,
   moveLayerEditorLayer,
+  moveLayerEditorLayerRelativeTo,
   moveLayerEditorLayerToGroup,
   normalizeLayerEditorDocument,
   normalizeLayerEditorSelection,
@@ -146,6 +147,85 @@ describe("@moritzbrantner/layer-editor core", () => {
     const ungrouped = removeLayerEditorGroup(moved, "content");
     expect(ungrouped.groups).toBeUndefined();
     expect(ungrouped.layers.every((layer) => layer.parentGroupId === undefined)).toBe(true);
+  });
+
+  test("moves ungrouped layers relative to grouped targets", () => {
+    const grouped = addLayerEditorGroup(document, {
+      id: "content",
+      label: "Content",
+      layerIds: ["mask", "labels"],
+    });
+    const moved = moveLayerEditorLayerRelativeTo(grouped, "background", "mask", "before");
+
+    expect(moved.layers.map((layer) => layer.id)).toEqual(["background", "mask", "labels"]);
+    expect(moved.groups?.[0]?.layerIds).toEqual(["background", "mask", "labels"]);
+    expect(moved.layers.find((layer) => layer.id === "background")?.parentGroupId).toBe("content");
+  });
+
+  test("moves grouped layers between groups relative to target layers", () => {
+    const grouped: LayerEditorDocument = createLayerEditorDocument({
+      groups: [
+        { id: "base", label: "Base", layerIds: ["background"] },
+        { id: "content", label: "Content", layerIds: ["mask", "labels"] },
+      ],
+      layers: document.layers.map((layer) => ({
+        ...layer,
+        parentGroupId:
+          layer.id === "background"
+            ? "base"
+            : layer.id === "mask" || layer.id === "labels"
+              ? "content"
+              : undefined,
+      })),
+    });
+
+    const moved = moveLayerEditorLayerRelativeTo(grouped, "background", "labels", "after");
+
+    expect(moved.layers.map((layer) => layer.id)).toEqual(["mask", "labels", "background"]);
+    expect(moved.groups?.find((group) => group.id === "base")).toBeUndefined();
+    expect(moved.groups?.find((group) => group.id === "content")?.layerIds).toEqual([
+      "mask",
+      "labels",
+      "background",
+    ]);
+    expect(moved.layers.find((layer) => layer.id === "background")?.parentGroupId).toBe("content");
+  });
+
+  test("moves grouped layers relative to ungrouped targets", () => {
+    const grouped = addLayerEditorGroup(document, {
+      id: "content",
+      label: "Content",
+      layerIds: ["mask"],
+    });
+    const moved = moveLayerEditorLayerRelativeTo(grouped, "mask", "background", "after");
+
+    expect(moved.groups).toBeUndefined();
+    expect(moved.layers.map((layer) => layer.id)).toEqual(["background", "mask", "labels"]);
+    expect(moved.layers.find((layer) => layer.id === "mask")?.parentGroupId).toBeUndefined();
+  });
+
+  test("returns original documents for invalid relative layer moves", () => {
+    expect(moveLayerEditorLayerRelativeTo(document, "missing", "mask", "before")).toBe(document);
+    expect(moveLayerEditorLayerRelativeTo(document, "mask", "missing", "before")).toBe(document);
+    expect(moveLayerEditorLayerRelativeTo(document, "mask", "mask", "before")).toBe(document);
+  });
+
+  test("repairs duplicate group membership during relative layer moves", () => {
+    const repaired = moveLayerEditorLayerRelativeTo(
+      {
+        groups: [{ id: "content", label: "Content", layerIds: ["mask", "labels", "labels"] }],
+        layers: [
+          { id: "background", kind: "image", label: "Background" },
+          { id: "mask", kind: "mask", label: "Mask", parentGroupId: "content" },
+          { id: "labels", kind: "text", label: "Labels", parentGroupId: "content" },
+        ],
+      },
+      "labels",
+      "mask",
+      "before",
+    );
+
+    expect(repaired.groups?.[0]?.layerIds).toEqual(["labels", "mask"]);
   });
 
   test("adds and removes sources", () => {

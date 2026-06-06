@@ -19,10 +19,29 @@ export type SerializedLayerEditorDocument<
   document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>;
 };
 
-export class LayerEditorParseError extends Error {
-  issues: Array<{ path: string; message: string }>;
+export type LayerEditorParseIssueCode =
+  | "invalid-input"
+  | "invalid-document"
+  | "invalid-format"
+  | "invalid-schema-version"
+  | "unsupported-schema-version";
 
-  constructor(issues: Array<{ path: string; message: string }>) {
+export type LayerEditorParseIssue = {
+  code: LayerEditorParseIssueCode;
+  path: string;
+  message: string;
+};
+
+export type LayerEditorDocumentMigration = (document: unknown) => unknown;
+
+export type LayerEditorParseOptions = {
+  migrations?: Partial<Record<number, LayerEditorDocumentMigration>>;
+};
+
+export class LayerEditorParseError extends Error {
+  issues: LayerEditorParseIssue[];
+
+  constructor(issues: LayerEditorParseIssue[]) {
     super(issues.map((issue) => `${issue.path}: ${issue.message}`).join("; "));
     this.name = "LayerEditorParseError";
     this.issues = issues;
@@ -43,13 +62,17 @@ export function serializeLayerEditorDocument<
   };
 }
 
-export function parseLayerEditorDocument(input: unknown): LayerEditorDocument {
-  const document = readLayerEditorDocument(input);
+export function parseLayerEditorDocument(
+  input: unknown,
+  options: LayerEditorParseOptions = {},
+): LayerEditorDocument {
+  const document = readLayerEditorDocument(input, "", options);
   const diagnostics = validateLayerEditorDocument(document);
 
   if (diagnostics.length > 0) {
     throw new LayerEditorParseError(
       diagnostics.map((diagnostic) => ({
+        code: "invalid-document",
         message: diagnostic.message,
         path: diagnostic.path,
       })),
@@ -59,26 +82,23 @@ export function parseLayerEditorDocument(input: unknown): LayerEditorDocument {
   return normalizeLayerEditorDocument(document);
 }
 
-export function readLayerEditorDocument(input: unknown, path = ""): LayerEditorDocument {
+export function readLayerEditorDocument(
+  input: unknown,
+  path = "",
+  options: LayerEditorParseOptions = {},
+): LayerEditorDocument {
   if (!isRecord(input)) {
-    throw new LayerEditorParseError([{ message: "Expected an object.", path }]);
+    throwParseError("invalid-input", path, "Expected an object.");
   }
 
-  const maybeSerialized =
-    input.format === layerEditorDocumentFormat &&
-    input.schemaVersion === currentLayerEditorSchemaVersion &&
-    isRecord(input.document)
-      ? input.document
-      : input;
+  const maybeSerialized = resolveSerializedDocument(input, path, options);
 
   if (!isRecord(maybeSerialized)) {
-    throw new LayerEditorParseError([{ message: "Expected document object.", path }]);
+    throwParseError("invalid-document", path, "Expected document object.");
   }
 
   if (!Array.isArray(maybeSerialized.layers)) {
-    throw new LayerEditorParseError([
-      { message: "Expected layers array.", path: withPath(path, "layers") },
-    ]);
+    throwParseError("invalid-document", withPath(path, "layers"), "Expected layers array.");
   }
 
   const document: LayerEditorDocument = {
@@ -106,7 +126,7 @@ export function readLayerEditorDocument(input: unknown, path = ""): LayerEditorD
 
 function readLayer(input: unknown, path: string) {
   if (!isRecord(input)) {
-    throw new LayerEditorParseError([{ message: "Expected layer object.", path }]);
+    throwParseError("invalid-document", path, "Expected layer object.");
   }
 
   return {
@@ -128,7 +148,7 @@ function readLayer(input: unknown, path: string) {
 
 function readGroup(input: unknown, path: string) {
   if (!isRecord(input)) {
-    throw new LayerEditorParseError([{ message: "Expected group object.", path }]);
+    throwParseError("invalid-document", path, "Expected group object.");
   }
 
   return {
@@ -144,7 +164,7 @@ function readGroup(input: unknown, path: string) {
 
 function readSource(input: unknown, path: string) {
   if (!isRecord(input)) {
-    throw new LayerEditorParseError([{ message: "Expected source object.", path }]);
+    throwParseError("invalid-document", path, "Expected source object.");
   }
 
   return {
@@ -157,7 +177,7 @@ function readSource(input: unknown, path: string) {
 
 function readBounds(input: unknown, path: string) {
   if (!isRecord(input)) {
-    throw new LayerEditorParseError([{ message: "Expected bounds object.", path }]);
+    throwParseError("invalid-document", path, "Expected bounds object.");
   }
 
   return {
@@ -171,7 +191,7 @@ function readBounds(input: unknown, path: string) {
 
 function readViewport(input: unknown, path: string) {
   if (!isRecord(input)) {
-    throw new LayerEditorParseError([{ message: "Expected viewport object.", path }]);
+    throwParseError("invalid-document", path, "Expected viewport object.");
   }
 
   return {
@@ -183,7 +203,7 @@ function readViewport(input: unknown, path: string) {
 
 function requiredString(input: unknown, path: string) {
   if (typeof input !== "string") {
-    throw new LayerEditorParseError([{ message: "Expected string.", path }]);
+    throwParseError("invalid-document", path, "Expected string.");
   }
 
   return input;
@@ -204,7 +224,7 @@ function optionalBlendMode(input: unknown, path: string): LayerEditorBlendMode |
 
   const value = requiredString(input, path);
   if (!layerEditorBlendModes.includes(value as LayerEditorBlendMode)) {
-    throw new LayerEditorParseError([{ message: "Expected layer blend mode.", path }]);
+    throwParseError("invalid-document", path, "Expected layer blend mode.");
   }
 
   return value as LayerEditorBlendMode;
@@ -212,7 +232,7 @@ function optionalBlendMode(input: unknown, path: string): LayerEditorBlendMode |
 
 function requiredNumber(input: unknown, path: string) {
   if (typeof input !== "number" || !Number.isFinite(input)) {
-    throw new LayerEditorParseError([{ message: "Expected finite number.", path }]);
+    throwParseError("invalid-document", path, "Expected finite number.");
   }
 
   return input;
@@ -232,7 +252,7 @@ function optionalBoolean(input: unknown, path: string) {
   }
 
   if (typeof input !== "boolean") {
-    throw new LayerEditorParseError([{ message: "Expected boolean.", path }]);
+    throwParseError("invalid-document", path, "Expected boolean.");
   }
 
   return input;
@@ -240,7 +260,7 @@ function optionalBoolean(input: unknown, path: string) {
 
 function requiredStringArray(input: unknown, path: string) {
   if (!Array.isArray(input) || !input.every((item) => typeof item === "string")) {
-    throw new LayerEditorParseError([{ message: "Expected string array.", path }]);
+    throwParseError("invalid-document", path, "Expected string array.");
   }
 
   return input;
@@ -248,6 +268,55 @@ function requiredStringArray(input: unknown, path: string) {
 
 function withPath(path: string, segment: string) {
   return path ? `${path}.${segment}` : segment;
+}
+
+function resolveSerializedDocument(
+  input: Record<string, unknown>,
+  path: string,
+  options: LayerEditorParseOptions,
+) {
+  if (input.format !== layerEditorDocumentFormat) {
+    return input;
+  }
+
+  if (!("schemaVersion" in input)) {
+    throwParseError(
+      "invalid-schema-version",
+      withPath(path, "schemaVersion"),
+      "Expected schema version.",
+    );
+  }
+
+  if (typeof input.schemaVersion !== "number" || !Number.isFinite(input.schemaVersion)) {
+    throwParseError(
+      "invalid-schema-version",
+      withPath(path, "schemaVersion"),
+      "Expected finite schema version.",
+    );
+  }
+
+  if (!isRecord(input.document)) {
+    throwParseError("invalid-document", withPath(path, "document"), "Expected document object.");
+  }
+
+  if (input.schemaVersion === currentLayerEditorSchemaVersion) {
+    return input.document;
+  }
+
+  const migrate = options.migrations?.[input.schemaVersion];
+  if (!migrate) {
+    throwParseError(
+      "unsupported-schema-version",
+      withPath(path, "schemaVersion"),
+      `Unsupported schema version ${input.schemaVersion}.`,
+    );
+  }
+
+  return migrate(input.document);
+}
+
+function throwParseError(code: LayerEditorParseIssueCode, path: string, message: string): never {
+  throw new LayerEditorParseError([{ code, message, path }]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

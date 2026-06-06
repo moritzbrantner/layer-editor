@@ -1,4 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
+import {
+  Card,
+  CardContent,
+  Field,
+  FieldLabel,
+  Input,
+  NativeSelect,
+  NativeSelectOption,
+  Separator,
+  Slider,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@moritzbrantner/ui";
 import { useEffect, useState, type CSSProperties } from "react";
 
 import {
@@ -87,16 +101,6 @@ const initialSelection = {
   primaryLayerId: null,
 } satisfies LayerEditorSelection;
 
-const panelClassName =
-  "rounded-lg border border-[#c7cec6] bg-[#f6f7f2] shadow-[0_16px_50px_rgba(41,57,52,0.1)]";
-
-function exampleTabClassName(active: boolean) {
-  return [
-    "min-h-10 rounded-md px-3.5 text-[#40514c] transition-colors",
-    active ? "bg-[#263632] text-[#f7f4e8]" : "hover:bg-white/50",
-  ].join(" ");
-}
-
 async function loadExampleDocuments(): Promise<ExampleDocuments> {
   const sampleImageSrc = createSampleImageDataUrl();
 
@@ -165,65 +169,71 @@ export function App() {
             Layer Editor Examples
           </h1>
         </div>
-        <nav
-          className="grid grid-cols-1 items-center gap-1 rounded-lg border border-[#c3cbc2] bg-[#d8ded7] p-1 sm:grid-cols-3"
-          aria-label="Examples"
+        <Tabs
+          value={activeExample}
+          onValueChange={(value) => setActiveExample(value as ExampleKey)}
         >
-          {(Object.keys(exampleLabels) as ExampleKey[]).map((example) => (
-            <button
-              key={example}
-              aria-pressed={example === activeExample}
-              className={exampleTabClassName(example === activeExample)}
-              type="button"
-              onClick={() => setActiveExample(example)}
-            >
-              {exampleLabels[example]}
-            </button>
-          ))}
-        </nav>
+          <TabsList aria-label="Examples" className="grid grid-cols-3">
+            {(Object.keys(exampleLabels) as ExampleKey[]).map((example) => (
+              <TabsTrigger key={example} value={example}>
+                {exampleLabels[example]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </header>
 
       <section
         className="mx-auto grid max-w-[1320px] grid-cols-1 gap-4 min-[960px]:grid-cols-[minmax(0,1fr)_360px]"
         aria-label={`${exampleLabels[activeExample]} example`}
       >
-        <section
-          className={`${panelClassName} grid min-h-0 items-center overflow-hidden p-3 min-[960px]:min-h-[610px] min-[960px]:p-6`}
+        <Card
           aria-label="Layer preview"
+          className="min-h-0 overflow-hidden min-[960px]:min-h-[610px]"
         >
-          <ExamplePreview document={document} example={activeExample} selection={selection} />
-        </section>
+          <CardContent className="grid h-full items-center p-3 min-[960px]:p-6">
+            <ExamplePreview document={document} example={activeExample} selection={selection} />
+          </CardContent>
+        </Card>
 
-        <aside className={`${panelClassName} grid gap-4 p-3.5`} aria-label="Layer controls">
-          <LayerEditorPanel
-            document={document}
-            renderLayerMeta={renderLayerMeta}
-            selection={selection}
-            onDocumentChange={(nextDocument) => setActiveDocument(nextDocument as ExampleDocument)}
-            onSelectionChange={(nextSelection) =>
-              setSelections((currentSelections) => ({
-                ...currentSelections,
-                [activeExample]: nextSelection,
-              }))
-            }
-          />
-          <LayerControls
-            document={document}
-            layer={selectedLayer}
-            onDocumentChange={setActiveDocument}
-          />
+        <aside aria-label="Layer controls">
+          <Card>
+            <CardContent className="grid gap-4 p-3.5">
+              <LayerEditorPanel
+                document={document}
+                renderLayerMeta={renderLayerMeta}
+                selection={selection}
+                onDocumentChange={(nextDocument) =>
+                  setActiveDocument(nextDocument as ExampleDocument)
+                }
+                onSelectionChange={(nextSelection) =>
+                  setSelections((currentSelections) => ({
+                    ...currentSelections,
+                    [activeExample]: nextSelection,
+                  }))
+                }
+              />
+              <LayerControls
+                document={document}
+                layer={selectedLayer}
+                onDocumentChange={setActiveDocument}
+              />
+            </CardContent>
+          </Card>
         </aside>
       </section>
 
-      <section
-        className={`${panelClassName} mx-auto mt-4 hidden max-w-[1320px] overflow-hidden p-4 min-[560px]:block`}
+      <Card
         aria-label="Serialized document"
+        className="mx-auto mt-4 hidden max-w-[1320px] overflow-hidden min-[560px]:block"
       >
-        <h2 className="mb-3 text-base leading-[1.1] font-bold">Document</h2>
-        <pre className="max-h-[340px] overflow-auto rounded-lg bg-[#202927] p-3.5 text-[0.8rem] text-[#edf3e7]">
-          {JSON.stringify(serializeLayerEditorDocument(document), null, 2)}
-        </pre>
-      </section>
+        <CardContent className="p-4">
+          <h2 className="mb-3 text-base leading-[1.1] font-bold">Document</h2>
+          <pre className="max-h-[340px] overflow-auto rounded-lg bg-[#202927] p-3.5 text-[0.8rem] text-[#edf3e7]">
+            {JSON.stringify(serializeLayerEditorDocument(document), null, 2)}
+          </pre>
+        </CardContent>
+      </Card>
     </main>
   );
 }
@@ -231,10 +241,12 @@ export function App() {
 function ShellMessage({ detail, title }: { detail?: string; title: string }) {
   return (
     <main className="grid min-h-screen place-items-center bg-[#e8ece7] p-4 text-[#21302d]">
-      <section className={`${panelClassName} w-full max-w-md p-6`}>
-        <h1 className="text-2xl leading-[1.1] font-bold">{title}</h1>
-        {detail ? <p className="mt-3 text-sm text-[#61726d]">{detail}</p> : null}
-      </section>
+      <Card className="w-full max-w-md">
+        <CardContent className="p-6">
+          <h1 className="text-2xl leading-[1.1] font-bold">{title}</h1>
+          {detail ? <p className="mt-3 text-sm text-[#61726d]">{detail}</p> : null}
+        </CardContent>
+      </Card>
     </main>
   );
 }
@@ -512,6 +524,7 @@ function LayerControls({
     return (
       <section className="layer-controls">
         <h2>Layer</h2>
+        <Separator />
         <p className="empty-state">Select a layer.</p>
       </section>
     );
@@ -535,30 +548,36 @@ function LayerControls({
   return (
     <section className="layer-controls">
       <h2>Layer</h2>
-      <label>
-        <span>Name</span>
-        <input
+      <Separator />
+      <Field>
+        <FieldLabel htmlFor="layer-name">Name</FieldLabel>
+        <Input
+          id="layer-name"
           disabled={disabled}
           type="text"
           value={layer.label}
           onChange={(event) => patchLayer({ label: event.target.value })}
         />
-      </label>
-      <label>
-        <span>Opacity</span>
-        <input
+      </Field>
+      <Field>
+        <FieldLabel>Opacity</FieldLabel>
+        <Slider
           disabled={disabled}
-          max="1"
-          min="0"
-          step="0.05"
-          type="range"
-          value={layer.opacity ?? 1}
-          onChange={(event) => patchLayer({ opacity: Number(event.target.value) })}
+          max={1}
+          min={0}
+          step={0.05}
+          thumbAriaLabel="Layer opacity"
+          value={[layer.opacity ?? 1]}
+          onValueChange={(value) => {
+            const [opacity = 1] = value;
+            patchLayer({ opacity });
+          }}
         />
-      </label>
-      <label>
-        <span>Blend</span>
-        <select
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="layer-blend">Blend</FieldLabel>
+        <NativeSelect
+          id="layer-blend"
           disabled={disabled}
           value={layer.blendMode ?? "normal"}
           onChange={(event) =>
@@ -566,36 +585,39 @@ function LayerControls({
           }
         >
           {layerEditorBlendModes.map((blendMode) => (
-            <option key={blendMode} value={blendMode}>
+            <NativeSelectOption key={blendMode} value={blendMode}>
               {blendMode}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
-      </label>
+        </NativeSelect>
+      </Field>
       <div className="color-row">
-        <label>
-          <span>Fill</span>
+        <Field>
+          <FieldLabel htmlFor="layer-fill">Fill</FieldLabel>
           <input
+            id="layer-fill"
             disabled={disabled}
             type="color"
             value={stringStyle(layer, "fill", "#2f6f5e")}
             onChange={(event) => patchStyle({ fill: event.target.value })}
           />
-        </label>
-        <label>
-          <span>Stroke</span>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="layer-stroke">Stroke</FieldLabel>
           <input
+            id="layer-stroke"
             disabled={disabled}
             type="color"
             value={normalizeColorValue(stringStyle(layer, "stroke", "#18312c"))}
             onChange={(event) => patchStyle({ stroke: event.target.value })}
           />
-        </label>
+        </Field>
       </div>
       {layer.data?.kind === "image-label" ? (
-        <label>
-          <span>Text</span>
-          <input
+        <Field>
+          <FieldLabel htmlFor="layer-text">Text</FieldLabel>
+          <Input
+            id="layer-text"
             disabled={disabled}
             type="text"
             value={layer.data.text}
@@ -605,7 +627,7 @@ function LayerControls({
               })
             }
           />
-        </label>
+        </Field>
       ) : null}
     </section>
   );

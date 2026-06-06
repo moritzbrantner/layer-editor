@@ -33,4 +33,61 @@ describe("@moritzbrantner/layer-editor history", () => {
     const history = createLayerEditorHistory(document);
     expect(commitLayerEditorHistory(history, document)).toBe(history);
   });
+
+  test("trims history to the configured limit", () => {
+    const history = createLayerEditorHistory(document);
+    const first = updateLayerEditorLayer(document, "layer", { opacity: 0.8 });
+    const second = updateLayerEditorLayer(document, "layer", { opacity: 0.6 });
+    const third = updateLayerEditorLayer(document, "layer", { opacity: 0.4 });
+
+    const committed = [first, second, third].reduce(
+      (currentHistory, nextDocument) =>
+        commitLayerEditorHistory(currentHistory, nextDocument, { limit: 2 }),
+      history,
+    );
+
+    expect(committed.past).toHaveLength(2);
+    expect(committed.past[0]?.layers[0]?.opacity).toBe(0.8);
+  });
+
+  test("keeps at least one past entry for invalid history limits", () => {
+    const history = createLayerEditorHistory(document);
+    const first = updateLayerEditorLayer(document, "layer", { opacity: 0.8 });
+    const second = updateLayerEditorLayer(document, "layer", { opacity: 0.6 });
+    const committed = commitLayerEditorHistory(
+      commitLayerEditorHistory(history, first, { limit: 0 }),
+      second,
+      { limit: 0 },
+    );
+
+    expect(committed.past).toHaveLength(1);
+    expect(committed.past[0]?.layers[0]?.opacity).toBe(0.8);
+  });
+
+  test("clears future entries when committing after undo", () => {
+    const first = updateLayerEditorLayer(document, "layer", { opacity: 0.8 });
+    const second = updateLayerEditorLayer(document, "layer", { opacity: 0.6 });
+    const undone = undoLayerEditorHistory(
+      commitLayerEditorHistory(
+        commitLayerEditorHistory(createLayerEditorHistory(document), first),
+        second,
+      ),
+    );
+    const next = updateLayerEditorLayer(undone.present, "layer", { opacity: 0.2 });
+    const committed = commitLayerEditorHistory(undone, next);
+
+    expect(undone.future).toHaveLength(1);
+    expect(committed.future).toEqual([]);
+  });
+
+  test("redo pushes current present into past", () => {
+    const nextDocument = updateLayerEditorLayer(document, "layer", { opacity: 0.4 });
+    const undone = undoLayerEditorHistory(
+      commitLayerEditorHistory(createLayerEditorHistory(document), nextDocument),
+    );
+    const redone = redoLayerEditorHistory(undone);
+
+    expect(redone.past.at(-1)?.layers[0]?.opacity).toBe(1);
+    expect(redone.present.layers[0]?.opacity).toBe(0.4);
+  });
 });

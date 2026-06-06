@@ -92,110 +92,12 @@
     outline-offset: 4px;
   }
 
-  .mb-layer-editor {
-    @apply grid gap-1.5;
-  }
-
-  .mb-layer-editor__group {
-    @apply grid gap-1.5;
-  }
-
-  .mb-layer-editor__group-header {
-    @apply flex items-center gap-2 px-1.5 text-[0.82rem] font-extrabold text-[#61726d] uppercase;
-  }
-
-  .mb-layer-editor__group-layers {
-    @apply grid gap-1.5;
-  }
-
-  .mb-layer-editor__layer {
-    @apply grid min-h-[54px] items-center gap-1.5 rounded-lg border border-[#d6ded4] bg-white p-1.5;
-    grid-template-columns: 32px 32px minmax(0, 1fr) 32px 32px 32px;
-  }
-
-  .mb-layer-editor__layer[draggable="true"] {
-    @apply cursor-grab;
-  }
-
-  .mb-layer-editor__layer--dragging {
-    @apply cursor-grabbing opacity-60;
-  }
-
-  .mb-layer-editor__layer--drop-before {
-    @apply border-t-[#3159a5];
-    box-shadow: inset 0 3px 0 #3159a5;
-  }
-
-  .mb-layer-editor__layer--drop-after {
-    @apply border-b-[#3159a5];
-    box-shadow: inset 0 -3px 0 #3159a5;
-  }
-
-  .mb-layer-editor__layer--selected {
-    @apply border-[#3159a5] bg-[#eef3ff];
-  }
-
-  .mb-layer-editor__icon-button {
-    @apply inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#d6ded4] bg-[#eef1ec] p-0 text-[#263632];
-  }
-
-  .mb-layer-editor__layer-main {
-    @apply grid min-w-0 gap-px;
-  }
-
-  .mb-layer-editor__layer-options {
-    @apply relative;
-  }
-
-  .mb-layer-editor__layer-menu {
-    @apply absolute top-full right-0 z-20 mt-1 grid min-w-[124px] gap-1 rounded-md border border-[#c7cec6] bg-white p-1 shadow-lg;
-  }
-
-  .mb-layer-editor__layer-menu-item {
-    @apply flex min-h-8 w-full items-center gap-2 rounded px-2 text-left text-[0.84rem] font-bold text-[#263632];
-  }
-
-  .mb-layer-editor__layer-menu-item:not(:disabled):hover,
-  .mb-layer-editor__layer-menu-item:not(:disabled):focus-visible {
-    @apply bg-[#eef3ff] outline-none;
-  }
-
-  .mb-layer-editor__layer-label,
-  .mb-layer-editor__layer-meta {
-    @apply overflow-hidden text-ellipsis whitespace-nowrap;
-  }
-
-  .mb-layer-editor__layer-label {
-    @apply font-extrabold text-[#21302d];
-  }
-
-  .mb-layer-editor__layer-label-input {
-    @apply h-6 min-w-0 rounded border border-[#3159a5] bg-white px-1.5 font-extrabold text-[#21302d] outline-none;
-  }
-
-  .mb-layer-editor__layer-meta {
-    @apply text-[0.78rem] text-[#61726d];
-  }
-
   .layer-controls {
-    @apply grid gap-3 border-t border-[#d6ded4] pt-4;
-  }
-
-  .layer-controls label {
-    @apply grid gap-1.5 text-[0.82rem] font-extrabold text-[#4c5d58];
-  }
-
-  .layer-controls input[type="text"],
-  .layer-controls select {
-    @apply min-h-[38px] w-full rounded-md border border-[#c7cec6] bg-white px-2.5 text-[#21302d];
-  }
-
-  .layer-controls input[type="range"] {
-    @apply w-full accent-[#3159a5];
+    @apply grid gap-3;
   }
 
   .layer-controls input[type="color"] {
-    @apply h-[38px] w-full border-0 bg-transparent p-0;
+    @apply h-[38px] w-full rounded-md border border-[#c7cec6] bg-transparent p-0;
   }
 
   .color-row {
@@ -204,11 +106,5 @@
 
   .empty-state {
     @apply m-0 text-[#61726d];
-  }
-}
-
-@media (max-width: 560px) {
-  .mb-layer-editor__layer {
-    grid-template-columns: 30px 30px minmax(0, 1fr) 30px 30px 30px;
   }
 }

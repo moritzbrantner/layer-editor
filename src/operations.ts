@@ -24,6 +24,8 @@ export class LayerEditorDocumentValidationError extends Error {
   }
 }
 
+export type LayerEditorLayerDropPosition = "after" | "before";
+
 export function createLayerEditorDocument<
   TLayerData = Record<string, unknown>,
   TGroupData = Record<string, unknown>,
@@ -478,6 +480,63 @@ export function moveLayerEditorLayer<
   const [layer] = layers.splice(index, 1);
   layers.splice(clampInsertIndex(targetIndex, layers.length), 0, layer);
   return normalizeLayerEditorDocument({ ...document, layers }, { mode: "repair" });
+}
+
+export function moveLayerEditorLayerRelativeTo<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>(
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+  layerId: string,
+  targetLayerId: string,
+  position: LayerEditorLayerDropPosition,
+) {
+  if (layerId === targetLayerId) {
+    return document;
+  }
+
+  const sourceIndex = document.layers.findIndex((layer) => layer.id === layerId);
+  const targetIndex = document.layers.findIndex((layer) => layer.id === targetLayerId);
+  if (sourceIndex < 0 || targetIndex < 0) {
+    return document;
+  }
+
+  const targetLayer = document.layers[targetIndex];
+  const targetGroupId =
+    targetLayer?.parentGroupId ??
+    document.groups?.find((group) => group.layerIds.includes(targetLayerId))?.id;
+
+  const layers = [...document.layers];
+  const [sourceLayer] = layers.splice(sourceIndex, 1);
+  let insertionIndex = position === "before" ? targetIndex : targetIndex + 1;
+  if (sourceIndex < insertionIndex) {
+    insertionIndex -= 1;
+  }
+  layers.splice(clampInsertIndex(insertionIndex, layers.length), 0, {
+    ...sourceLayer,
+    parentGroupId: targetGroupId,
+  });
+
+  const groups = document.groups?.map((group) => {
+    const layerIds = group.layerIds.filter((id) => id !== layerId);
+    if (group.id !== targetGroupId) {
+      return { ...group, layerIds };
+    }
+
+    const groupTargetIndex = layerIds.indexOf(targetLayerId);
+    const groupInsertionIndex =
+      groupTargetIndex < 0
+        ? layerIds.length
+        : position === "before"
+          ? groupTargetIndex
+          : groupTargetIndex + 1;
+    const nextLayerIds = [...layerIds];
+    nextLayerIds.splice(clampInsertIndex(groupInsertionIndex, nextLayerIds.length), 0, layerId);
+    return { ...group, layerIds: nextLayerIds };
+  });
+
+  return normalizeLayerEditorDocument({ ...document, groups, layers }, { mode: "repair" });
 }
 
 export function moveLayerEditorLayerToGroup<

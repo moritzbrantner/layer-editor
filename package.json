@@ -12,10 +12,13 @@
     "url": "git+https://github.com/moritzbrantner/layer-editor.git"
   },
   "files": [
-    "dist"
+    "dist",
+    "styles.css"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "*.css"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -38,7 +41,8 @@
     "./serialization": {
       "types": "./dist/serialization.d.ts",
       "import": "./dist/serialization.js"
-    }
+    },
+    "./styles.css": "./styles.css"
   },
   "publishConfig": {
     "access": "public",
@@ -49,14 +53,16 @@
     "examples:build": "vite build --config examples/vite.config.ts",
     "examples:dev": "vite --config examples/vite.config.ts --host 0.0.0.0",
     "examples:preview": "vite preview --config examples/vite.config.ts --host 0.0.0.0",
-    "format": "oxfmt README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts src examples",
-    "format:check": "oxfmt --check README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts src examples",
+    "format": "oxfmt README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts styles.css src examples scripts",
+    "format:check": "oxfmt --check README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts styles.css src examples scripts",
     "lint": "oxlint src examples --format=github",
     "prepack": "bun run build",
     "check-types": "tsc --noEmit && tsc --noEmit -p examples/tsconfig.json",
     "test": "vitest run",
+    "pack:dry": "npm pack --dry-run --ignore-scripts --json",
+    "test:package": "bun run build && bun run pack:dry && node scripts/verify-package.mjs",
     "bench": "mkdir -p benchmark-results && vitest bench --run --outputJson benchmark-results/vitest-bench.json",
-    "verify": "bun run format:check && bun run lint && bun run check-types && bun run test && bun run build && bun run examples:build"
+    "verify": "bun run format:check && bun run lint && bun run check-types && bun run test && bun run build && bun run test:package && bun run examples:build"
   },
   "dependencies": {
     "@moritzbrantner/ui": "^0.9.1",

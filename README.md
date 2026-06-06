@@ -62,6 +62,8 @@ const restored = parseLayerEditorDocument(stored);
 
 ```tsx
 import { useState } from "react";
+import "@moritzbrantner/ui/studio/styles.css";
+import "@moritzbrantner/layer-editor/styles.css";
 import {
   LayerEditorPanel,
   type LayerEditorDocument,

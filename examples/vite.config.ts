@@ -12,6 +12,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
+      "@moritzbrantner/layer-editor/styles.css": fileURLToPath(
+        new URL("../styles.css", import.meta.url),
+      ),
       "@moritzbrantner/layer-editor": fileURLToPath(new URL("../src/index.ts", import.meta.url)),
       "@moritzbrantner/layer-editor/core": fileURLToPath(
         new URL("../src/core.ts", import.meta.url),
