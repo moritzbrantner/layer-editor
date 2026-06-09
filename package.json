@@ -65,7 +65,7 @@
     "verify": "bun run format:check && bun run lint && bun run check-types && bun run test && bun run build && bun run test:package && bun run examples:build"
   },
   "dependencies": {
-    "@moritzbrantner/editor-core": "^0.1.0",
+    "@moritzbrantner/editor-core": "^0.2.1",
     "@moritzbrantner/ui": "^0.9.1",
     "lucide-react": "^1.17.0"
   },
