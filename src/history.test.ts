@@ -5,7 +5,12 @@ import {
   resetLayerEditorHistory,
   undoLayerEditorHistory,
 } from "./history";
-import { updateLayerEditorLayer, type LayerEditorDocument } from "./core";
+import {
+  setLayerEditorLayersOpacity,
+  updateLayerEditorLayer,
+  updateLayerEditorLayers,
+  type LayerEditorDocument,
+} from "./core";
 
 const document: LayerEditorDocument = {
   layers: [{ id: "layer", kind: "shape", label: "Layer" }],
@@ -78,6 +83,18 @@ describe("@moritzbrantner/layer-editor history", () => {
 
     expect(undone.future).toHaveLength(1);
     expect(committed.future).toEqual([]);
+  });
+
+  test("skips no-op batch updates and records meaningful batch updates", () => {
+    const history = createLayerEditorHistory(document);
+    const noOpDocument = updateLayerEditorLayers(history.present, ["missing"], { opacity: 0.2 });
+    const skipped = commitLayerEditorHistory(history, noOpDocument);
+    expect(skipped).toBe(history);
+
+    const nextDocument = setLayerEditorLayersOpacity(history.present, ["layer"], 0.4);
+    const committed = commitLayerEditorHistory(history, nextDocument);
+    expect(committed.past).toHaveLength(1);
+    expect(committed.present.layers[0]?.opacity).toBe(0.4);
   });
 
   test("redo pushes current present into past", () => {

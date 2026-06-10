@@ -1,6 +1,6 @@
 {
   "name": "@moritzbrantner/layer-editor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "homepage": "https://github.com/moritzbrantner/layer-editor#readme",
   "bugs": {
@@ -13,7 +13,8 @@
   },
   "files": [
     "dist",
-    "styles.css"
+    "styles.css",
+    "CHANGELOG.md"
   ],
   "type": "module",
   "sideEffects": [

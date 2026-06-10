@@ -7,12 +7,9 @@ import {
   duplicateLayerEditorLayer,
   duplicateLayerEditorLayers,
   groupLayerEditorLayers,
-  LayerEditorDocumentValidationError,
   moveLayerEditorLayer,
   moveLayerEditorLayerRelativeTo,
   moveLayerEditorLayerToGroup,
-  normalizeLayerEditorDocument,
-  normalizeLayerEditorSelection,
   removeLayerEditorGroup,
   removeLayerEditorLayer,
   removeLayerEditorLayers,
@@ -21,7 +18,6 @@ import {
   setLayerEditorLayerVisibility,
   ungroupLayerEditorGroup,
   updateLayerEditorLayer,
-  validateLayerEditorDocument,
   type LayerEditorDocument,
 } from "./core";
 
@@ -34,78 +30,7 @@ const document: LayerEditorDocument = {
   sources: [{ id: "image-source", kind: "image" }],
 };
 
-describe("@moritzbrantner/layer-editor core", () => {
-  test("creates documents with default viewport", () => {
-    expect(createLayerEditorDocument()).toEqual({
-      layers: [],
-      viewport: { x: 0, y: 0, zoom: 1 },
-    });
-  });
-
-  test("normalizes layer defaults and clamps editable numeric state", () => {
-    expect(
-      normalizeLayerEditorDocument(
-        {
-          layers: [
-            {
-              bounds: { height: -10, rotation: Number.NaN, width: -1, x: Number.NaN, y: 2 },
-              id: "layer",
-              kind: "shape",
-              label: "Layer",
-              opacity: 2,
-            },
-          ],
-          viewport: { x: Number.NaN, y: 5, zoom: -1 },
-        },
-        { mode: "repair" },
-      ),
-    ).toEqual({
-      layers: [
-        {
-          blendMode: "normal",
-          bounds: { height: 0, rotation: 0, width: 0, x: 0, y: 2 },
-          id: "layer",
-          kind: "shape",
-          label: "Layer",
-          locked: false,
-          opacity: 1,
-          visible: true,
-        },
-      ],
-      viewport: { x: 0, y: 5, zoom: Number.EPSILON },
-    });
-  });
-
-  test("reports duplicate ids and missing references", () => {
-    expect(
-      validateLayerEditorDocument({
-        groups: [{ id: "group", label: "Group", layerIds: ["missing", "a", "a"] }],
-        layers: [
-          { id: "a", kind: "shape", label: "A", parentGroupId: "missing-group", sourceId: "s" },
-          { id: "a", kind: "shape", label: "A duplicate" },
-        ],
-        sources: [
-          { id: "s", kind: "image" },
-          { id: "s", kind: "image" },
-        ],
-      }).map((diagnostic) => diagnostic.code),
-    ).toEqual([
-      "duplicate-layer-id",
-      "duplicate-source-id",
-      "missing-group-layer",
-      "duplicate-group-layer",
-      "missing-layer-group",
-    ]);
-  });
-
-  test("throws in strict normalization mode", () => {
-    expect(() =>
-      normalizeLayerEditorDocument({
-        layers: [{ id: "layer", kind: "shape", label: "Layer", opacity: Number.NaN }],
-      }),
-    ).toThrow(LayerEditorDocumentValidationError);
-  });
-
+describe("@moritzbrantner/layer-editor layer operations", () => {
   test("adds, updates, removes, duplicates, and reorders layers", () => {
     const withLayer = addLayerEditorLayer(document, {
       id: "foreground",
@@ -310,17 +235,5 @@ describe("@moritzbrantner/layer-editor core", () => {
     const removed = removeLayerEditorSource(withReference, "mask-source");
     expect(removed.sources?.map((source) => source.id)).toEqual(["image-source"]);
     expect(removed.layers.find((layer) => layer.id === "mask")?.sourceId).toBeUndefined();
-  });
-
-  test("normalizes selection after deleted layers", () => {
-    expect(
-      normalizeLayerEditorSelection(removeLayerEditorLayer(document, "mask"), {
-        layerIds: ["mask", "labels", "labels"],
-        primaryLayerId: "mask",
-      }),
-    ).toEqual({
-      layerIds: ["labels"],
-      primaryLayerId: "labels",
-    });
   });
 });

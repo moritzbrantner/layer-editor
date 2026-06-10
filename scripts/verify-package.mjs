@@ -43,6 +43,7 @@ const packedFiles = new Set(packInfo.files.map((file) => file.path));
 const requiredPackedFiles = [
   "package.json",
   "README.md",
+  "CHANGELOG.md",
   "styles.css",
   "dist/index.js",
   "dist/index.d.ts",

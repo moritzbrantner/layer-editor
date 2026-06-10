@@ -61,8 +61,10 @@ export type LayerEditorGroup<TGroupData = Record<string, unknown>> = {
   id: string;
   label: string;
   layerIds: string[];
+  blendMode?: LayerEditorBlendMode;
   collapsed?: boolean;
   locked?: boolean;
+  opacity?: number;
   visible?: boolean;
   data?: TGroupData;
 };
@@ -105,7 +107,10 @@ export type LayerEditorDocumentDiagnosticCode =
   | "missing-group-layer"
   | "duplicate-group-layer"
   | "invalid-layer-opacity"
+  | "invalid-layer-blend-mode"
   | "invalid-layer-bounds"
+  | "invalid-group-opacity"
+  | "invalid-group-blend-mode"
   | "invalid-viewport";
 
 export type LayerEditorDocumentDiagnostic = {

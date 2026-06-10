@@ -1,5 +1,6 @@
 import {
   LayerEditorParseError,
+  currentLayerEditorSchemaVersion,
   layerEditorDocumentFormat,
   parseLayerEditorDocument,
   readLayerEditorDocument,
@@ -15,6 +16,7 @@ describe("@moritzbrantner/layer-editor serialization", () => {
   test("serializes and parses wrapped documents", () => {
     const serialized = serializeLayerEditorDocument(document);
     expect(serialized.format).toBe(layerEditorDocumentFormat);
+    expect(serialized.schemaVersion).toBe(currentLayerEditorSchemaVersion);
     expect(parseLayerEditorDocument(serialized)).toEqual({
       layers: [
         {
@@ -32,7 +34,20 @@ describe("@moritzbrantner/layer-editor serialization", () => {
   });
 
   test("reads raw documents", () => {
-    expect(readLayerEditorDocument(document).layers[0]?.id).toBe("layer");
+    expect(readLayerEditorDocument(document)).toEqual({
+      layers: [
+        {
+          blendMode: "normal",
+          id: "layer",
+          kind: "shape",
+          label: "Layer",
+          locked: false,
+          opacity: 1,
+          visible: true,
+        },
+      ],
+      viewport: { x: 0, y: 0, zoom: 1 },
+    });
   });
 
   test("throws parse errors for invalid inputs", () => {
@@ -96,9 +111,37 @@ describe("@moritzbrantner/layer-editor serialization", () => {
     expect(migrated.layers[0]?.id).toBe("legacy");
   });
 
+  test("supports built-in migrations for v1 wrapped documents", () => {
+    const migrated = parseLayerEditorDocument({
+      document: {
+        groups: [{ id: "group", label: "Group", layerIds: ["layer"] }],
+        layers: [{ id: "layer", kind: "shape", label: "Layer", parentGroupId: "group" }],
+      },
+      format: layerEditorDocumentFormat,
+      schemaVersion: 1,
+    });
+
+    expect(migrated.groups?.[0]).toEqual(
+      expect.objectContaining({
+        blendMode: "normal",
+        id: "group",
+        opacity: 1,
+      }),
+    );
+  });
+
   test("round-trips domain data, style, groups, and sources", () => {
     const richDocument: LayerEditorDocument = {
-      groups: [{ id: "group", label: "Group", layerIds: ["layer"], data: { domain: true } }],
+      groups: [
+        {
+          blendMode: "multiply",
+          id: "group",
+          label: "Group",
+          layerIds: ["layer"],
+          opacity: 0.5,
+          data: { domain: true },
+        },
+      ],
       layers: [
         {
           data: { featureId: 42 },
@@ -118,6 +161,8 @@ describe("@moritzbrantner/layer-editor serialization", () => {
     expect(parsed.layers[0]?.data).toEqual({ featureId: 42 });
     expect(parsed.layers[0]?.style).toEqual({ fill: "#ffffff" });
     expect(parsed.groups?.[0]?.data).toEqual({ domain: true });
+    expect(parsed.groups?.[0]?.blendMode).toBe("multiply");
+    expect(parsed.groups?.[0]?.opacity).toBe(0.5);
     expect(parsed.sources?.[0]?.data).toEqual({ url: "/data.json" });
   });
 });

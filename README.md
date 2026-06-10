@@ -14,8 +14,11 @@ import {
   addLayerEditorLayer,
   createLayerEditorDocument,
   duplicateLayerEditorLayers,
+  getLayerEditorRenderStack,
   groupLayerEditorLayers,
+  patchLayerEditorLayerBounds,
   removeLayerEditorLayers,
+  setLayerEditorLayersOpacity,
 } from "@moritzbrantner/layer-editor";
 
 const document = createLayerEditorDocument({
@@ -38,14 +41,59 @@ const groupedDocument = groupLayerEditorLayers(nextDocument, {
   id: "content",
   label: "Content",
   layerIds: ["background", "labels"],
+  opacity: 0.85,
+  blendMode: "multiply",
 });
 
 const duplicatedDocument = duplicateLayerEditorLayers(groupedDocument, ["labels"]);
 const cleanedDocument = removeLayerEditorLayers(duplicatedDocument, ["background"]);
+const fadedDocument = setLayerEditorLayersOpacity(cleanedDocument, ["labels"], 0.6);
+const positionedDocument = patchLayerEditorLayerBounds(fadedDocument, "labels", {
+  x: 120,
+  y: 80,
+});
+
+const renderStack = getLayerEditorRenderStack(positionedDocument);
 ```
 
 Documents model ordered layers, groups, sources, visibility, locking, opacity,
 blend mode, optional bounds, optional styles, and optional domain data.
+
+Groups also model visibility, locking, opacity, and blend mode. Renderers can use
+`getLayerEditorRenderStack` or `resolveLayerEditorLayer` to consume effective
+layer state without duplicating group/source lookup logic.
+
+Host renderers should use the resolved stack for canvas, SVG, export, or preview
+flows, while keeping domain-specific drawing in the host package:
+
+```ts
+const stack = getLayerEditorRenderStack(document, {
+  includeHidden: false,
+  order: "document",
+});
+
+for (const entry of stack) {
+  renderLayer({
+    layer: entry.layer,
+    source: entry.source,
+    visible: entry.effectiveVisible,
+    locked: entry.effectiveLocked,
+    opacity: entry.effectiveOpacity,
+    blendMode: entry.effectiveBlendMode,
+    bounds: entry.layer.bounds,
+    style: entry.layer.style,
+  });
+}
+```
+
+Use `includeHidden` and `includeLocked` to choose whether editor-only, preview,
+and export flows include filtered layers.
+
+Batch helpers are available for common multi-layer edits:
+`updateLayerEditorLayers`, `setLayerEditorLayersVisibility`,
+`setLayerEditorLayersLocked`, `setLayerEditorLayersOpacity`,
+`setLayerEditorLayersBlendMode`, `patchLayerEditorLayersStyle`, and
+`patchLayerEditorLayersBounds`.
 
 ## History
 
@@ -85,6 +133,10 @@ import {
 const stored = serializeLayerEditorDocument(document);
 const restored = parseLayerEditorDocument(stored);
 ```
+
+Serialized documents use schema version 2. Version 1 wrapped documents are read
+through a built-in migration and normalize missing group visual fields to
+`visible: true`, `locked: false`, `opacity: 1`, and `blendMode: "normal"`.
 
 ## React
 
@@ -129,6 +181,16 @@ Custom menu content can be added with `renderLayerActions` and
 `renderGroupActions`.
 
 ## Migration
+
+### 0.2.0
+
+Serialized documents now use schema version 2. Version 1 wrapped documents parse
+automatically through the built-in migration path.
+
+Groups now normalize `visible`, `locked`, `opacity`, and `blendMode`. Invalid
+layer or group blend modes are reported by strict validation.
+
+### 0.1.x
 
 `onLayerMenuClick` was removed. Use `renderLayerActions` for custom layer menu
 items and `features={{ layerMenus: false }}` if a host wants to hide the
