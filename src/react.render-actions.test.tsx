@@ -17,6 +17,21 @@ describe("@moritzbrantner/layer-editor React panel render and actions", () => {
     expect(screen.getByRole("button", { name: "Add layer" })).toBeTruthy();
   });
 
+  test("respects toolbar and menu feature flags", () => {
+    render(
+      <LayerEditorPanel
+        document={document}
+        features={{ groupMenus: false, layerMenus: false, toolbar: false }}
+      />,
+    );
+
+    expect(screen.getByText("Content")).toBeTruthy();
+    expect(screen.getByText("Mask")).toBeTruthy();
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Layer menu Mask" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Group menu Content" })).toBeNull();
+  });
+
   test("emits selection changes", () => {
     const onSelectionChange = vi.fn();
     render(<LayerEditorPanel document={document} onSelectionChange={onSelectionChange} />);
