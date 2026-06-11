@@ -1,6 +1,6 @@
 import {
-  createEditorEntityDocument,
-  type EditorEntityDocument,
+  createEditorEntityCollection,
+  type EditorEntityCollection,
   type EditorLayerAdapter,
 } from "@moritzbrantner/editor-core";
 
@@ -15,10 +15,10 @@ export const layerEditorLayerAdapter: EditorLayerAdapter<LayerEditorEntity> = {
   isVisible: (entity) => entity.layer.visible ?? true,
 };
 
-export function createLayerEditorEntityDocument<TLayerData = Record<string, unknown>>(
+export function createLayerEditorEntityCollection<TLayerData = Record<string, unknown>>(
   document: LayerEditorDocument<TLayerData, unknown, unknown>,
-): EditorEntityDocument<LayerEditorEntity<TLayerData>> {
-  return createEditorEntityDocument(
+): EditorEntityCollection<LayerEditorEntity<TLayerData>> {
+  return createEditorEntityCollection(
     document.layers.map((layer, index) => ({
       id: layer.id,
       label: layer.label,
@@ -33,4 +33,11 @@ export function createLayerEditorEntityDocument<TLayerData = Record<string, unkn
       type: layer.kind,
     })),
   );
+}
+
+/** @deprecated Use createLayerEditorEntityCollection. */
+export function createLayerEditorEntityDocument<TLayerData = Record<string, unknown>>(
+  document: LayerEditorDocument<TLayerData, unknown, unknown>,
+): EditorEntityCollection<LayerEditorEntity<TLayerData>> {
+  return createLayerEditorEntityCollection(document);
 }

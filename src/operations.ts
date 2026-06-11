@@ -10,7 +10,11 @@ export type {
 export { LayerEditorDocumentValidationError } from "./document-errors";
 export { assertLayerEditorDocument, validateLayerEditorDocument } from "./document-validation";
 export { createLayerEditorDocument, normalizeLayerEditorDocument } from "./document-normalization";
-export { createLayerEditorEntityDocument, layerEditorLayerAdapter } from "./entity";
+export {
+  createLayerEditorEntityCollection,
+  createLayerEditorEntityDocument,
+  layerEditorLayerAdapter,
+} from "./entity";
 export { normalizeLayerEditorSelection } from "./selection";
 export {
   findLayerEditorGroup,
