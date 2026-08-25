@@ -49,7 +49,16 @@ async function prepare() {
   await mkdir(stateDir, { recursive: true });
   await writeFile(
     stateFile,
-    `${JSON.stringify({ packageName: dependency.packageName, sourcePackageName: sourceManifest.name, sourceDir, revision }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        packageName: dependency.packageName,
+        sourcePackageName: sourceManifest.name,
+        sourceDir,
+        revision,
+      },
+      null,
+      2,
+    )}\n`,
   );
   process.stdout.write(
     `source dependency ready: ${dependency.packageName} -> ${sourceDir} @ ${revision.slice(0, 12)}\n`,
