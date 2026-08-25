@@ -15,12 +15,13 @@ Set `EDITOR_CORE_SOURCE=/absolute/path/to/editor-core` to override the sibling l
 ```sh
 bun run source:prepare
 bun run source:status
+bun run source:smoke
 bun run verify:source
 ```
 
-`source:prepare` installs frozen dependencies, recursively prepares upstream source dependencies when supported, builds editor-core, and links that checkout into `node_modules/@moritzbrantner/editor-core`. The source Git SHA is recorded under `node_modules/.editor-source-deps/`; package metadata and the lockfile remain release-oriented.
+`source:prepare` installs frozen dependencies, recursively prepares upstream source dependencies when supported, builds editor-core, and materializes that build into `node_modules/@moritzbrantner/editor-core` under Layer Editor's expected package identity. The source Git SHA is recorded under `node_modules/.editor-source-deps/`; committed package metadata and the lockfile remain release-oriented.
 
-Use `bun run source:watch` in another terminal while changing editor-core.
+`source:smoke` proves source mode is active and importable. `verify:source` additionally compiles and tests Layer Editor against that exact source revision, so it intentionally exposes API drift such as a renamed editor-core primitive instead of silently falling back to the registry package.
 
 Return to the published dependency contract with:
 
