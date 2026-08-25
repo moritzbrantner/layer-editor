@@ -54,8 +54,13 @@
     "examples:build": "vite build --config examples/vite.config.ts",
     "examples:dev": "vite --config examples/vite.config.ts --host 0.0.0.0",
     "examples:preview": "vite preview --config examples/vite.config.ts --host 0.0.0.0",
-    "format": "oxfmt README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts styles.css src examples scripts",
-    "format:check": "oxfmt --check README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts styles.css src examples scripts",
+    "dev:source": "bun run source:prepare && bun run examples:dev",
+    "source:prepare": "node scripts/source-deps.mjs prepare",
+    "source:status": "node scripts/source-deps.mjs status",
+    "source:restore": "node scripts/source-deps.mjs restore",
+    "source:watch": "node scripts/source-deps.mjs watch",
+    "format": "oxfmt README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts styles.css src examples scripts docs",
+    "format:check": "oxfmt --check README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts styles.css src examples scripts docs",
     "lint": "oxlint src examples --format=github",
     "prepack": "bun run build",
     "check-types": "tsc --noEmit && tsc --noEmit -p examples/tsconfig.json",
@@ -63,7 +68,10 @@
     "pack:dry": "npm pack --dry-run --ignore-scripts --json",
     "test:package": "bun run build && bun run pack:dry && node scripts/verify-package.mjs",
     "bench": "mkdir -p benchmark-results && vitest bench --run --outputJson benchmark-results/vitest-bench.json",
-    "verify": "bun run format:check && bun run lint && bun run check-types && bun run test && bun run build && bun run test:package && bun run examples:build"
+    "verify:checks": "bun run format:check && bun run lint && bun run check-types && bun run test && bun run build && bun run test:package && bun run examples:build",
+    "verify:source": "bun run source:prepare && bun run format:check && bun run lint && bun run check-types && bun run test && bun run build && bun run examples:build",
+    "verify:registry": "bun run source:restore && bun run verify:checks",
+    "verify": "bun run verify:registry"
   },
   "dependencies": {
     "@moritzbrantner/editor-core": "^0.3.0",
