@@ -33,6 +33,7 @@ async function prepare() {
   const sourceManifest = await readSourceManifest();
   run("bun", ["install", "--frozen-lockfile"], rootDir);
   run("bun", ["install", "--frozen-lockfile"], sourceDir);
+
   if (sourceManifest.scripts?.["source:prepare"]) {
     run("bun", ["run", "source:prepare"], sourceDir);
   }
@@ -60,6 +61,7 @@ async function prepare() {
       2,
     )}\n`,
   );
+
   process.stdout.write(
     `source dependency ready: ${dependency.packageName} -> ${sourceDir} @ ${revision.slice(0, 12)}\n`,
   );
@@ -73,10 +75,12 @@ async function restore() {
 }
 
 async function status() {
-  if (!(await isSymlink(targetDir))) {
+  const linked = await isSymlink(targetDir);
+  if (!linked) {
     process.stdout.write(`registry dependency active: ${dependency.packageName}\n`);
     return;
   }
+
   const resolved = await realpath(targetDir);
   let state;
   try {
@@ -85,7 +89,9 @@ async function status() {
     state = undefined;
   }
   const suffix = state?.revision ? ` @ ${state.revision.slice(0, 12)}` : "";
-  process.stdout.write(`source dependency active: ${dependency.packageName} -> ${resolved}${suffix}\n`);
+  process.stdout.write(
+    `source dependency active: ${dependency.packageName} -> ${resolved}${suffix}\n`,
+  );
 }
 
 async function watch() {
@@ -110,6 +116,7 @@ async function readSourceManifest() {
       `missing ${dependency.packageName} source checkout at ${sourceDir}; set ${dependency.sourceEnv} to override`,
     );
   }
+
   const manifest = JSON.parse(await readFile(path.join(sourceDir, "package.json"), "utf8"));
   if (!dependency.acceptedSourceNames.includes(manifest.name)) {
     fail(
