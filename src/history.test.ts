@@ -1,4 +1,6 @@
 import {
+  canRedoLayerEditorHistory,
+  canUndoLayerEditorHistory,
   commitLayerEditorHistory,
   createLayerEditorHistory,
   redoLayerEditorHistory,
@@ -32,6 +34,39 @@ describe("@moritzbrantner/layer-editor history", () => {
     expect(redone.present.layers[0]?.opacity).toBe(0.4);
 
     expect(resetLayerEditorHistory(nextDocument).past).toEqual([]);
+  });
+
+  test("reports undo and redo availability at each history boundary", () => {
+    const initial = createLayerEditorHistory(document);
+    expect(canUndoLayerEditorHistory(initial)).toBe(false);
+    expect(canRedoLayerEditorHistory(initial)).toBe(false);
+
+    const changed = updateLayerEditorLayer(document, "layer", { opacity: 0.7 });
+    const committed = commitLayerEditorHistory(initial, changed);
+    expect(canUndoLayerEditorHistory(committed)).toBe(true);
+    expect(canRedoLayerEditorHistory(committed)).toBe(false);
+
+    const undone = undoLayerEditorHistory(committed);
+    expect(canUndoLayerEditorHistory(undone)).toBe(false);
+    expect(canRedoLayerEditorHistory(undone)).toBe(true);
+
+    const redone = redoLayerEditorHistory(undone);
+    expect(canUndoLayerEditorHistory(redone)).toBe(true);
+    expect(canRedoLayerEditorHistory(redone)).toBe(false);
+  });
+
+  test("reset clears both undo and redo history", () => {
+    const changed = updateLayerEditorLayer(document, "layer", { opacity: 0.7 });
+    const undone = undoLayerEditorHistory(
+      commitLayerEditorHistory(createLayerEditorHistory(document), changed),
+    );
+    expect(undone.future).toHaveLength(1);
+
+    const reset = resetLayerEditorHistory(undone.present);
+    expect(reset.past).toEqual([]);
+    expect(reset.future).toEqual([]);
+    expect(canUndoLayerEditorHistory(reset)).toBe(false);
+    expect(canRedoLayerEditorHistory(reset)).toBe(false);
   });
 
   test("skips equivalent commits", () => {
