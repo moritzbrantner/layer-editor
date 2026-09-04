@@ -2,13 +2,7 @@ import { updateLayerEditorLayers } from "./layer-operations";
 import { resolveLayerEditorLayer } from "./render-stack";
 import type { LayerEditorBounds, LayerEditorDocument } from "./types";
 
-export type LayerEditorAlignment =
-  | "left"
-  | "center-x"
-  | "right"
-  | "top"
-  | "center-y"
-  | "bottom";
+export type LayerEditorAlignment = "left" | "center-x" | "right" | "top" | "center-y" | "bottom";
 
 export type LayerEditorDistributionAxis = "horizontal" | "vertical";
 
@@ -155,7 +149,7 @@ export function distributeLayerEditorLayers<
     return document;
   }
 
-  const ordered = entries.toSorted((left, right) =>
+  const ordered = [...entries].sort((left, right) =>
     axis === "horizontal"
       ? left.bounds.x - right.bounds.x || left.layerId.localeCompare(right.layerId)
       : left.bounds.y - right.bounds.y || left.layerId.localeCompare(right.layerId),
@@ -164,9 +158,7 @@ export function distributeLayerEditorLayers<
   const last = ordered.at(-1)!;
   const start = axis === "horizontal" ? first.bounds.x : first.bounds.y;
   const end =
-    axis === "horizontal"
-      ? last.bounds.x + last.bounds.width
-      : last.bounds.y + last.bounds.height;
+    axis === "horizontal" ? last.bounds.x + last.bounds.width : last.bounds.y + last.bounds.height;
   const totalSize = ordered.reduce(
     (sum, entry) => sum + (axis === "horizontal" ? entry.bounds.width : entry.bounds.height),
     0,
@@ -195,11 +187,7 @@ export function distributeLayerEditorLayers<
   );
 }
 
-function getEditableBoundedLayerIds<
-  TLayerData,
-  TGroupData,
-  TSourceData,
->(
+function getEditableBoundedLayerIds<TLayerData, TGroupData, TSourceData>(
   document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
   layerIds: readonly string[],
 ) {
