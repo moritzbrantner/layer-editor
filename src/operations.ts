@@ -70,4 +70,14 @@ export {
   removeLayerEditorSource,
   updateLayerEditorSource,
 } from "./source-operations";
+export {
+  alignLayerEditorLayers,
+  distributeLayerEditorLayers,
+  rotateLayerEditorLayers,
+  snapLayerEditorLayersToGrid,
+  translateLayerEditorLayers,
+  type LayerEditorAlignment,
+  type LayerEditorDistributionAxis,
+  type LayerEditorGridOptions,
+} from "./spatial-operations";
 export { createLayerEditorUniqueId } from "./operation-utils";
