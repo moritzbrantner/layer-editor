@@ -69,11 +69,7 @@ export function getLayerEditorRenderStack<
   const entries: Array<LayerEditorRenderEntry<TLayerData, TGroupData, TSourceData>> = [];
   const reverse = options.order === "reverse-document";
 
-  for (
-    let offset = 0;
-    offset < document.layers.length;
-    offset += 1
-  ) {
+  for (let offset = 0; offset < document.layers.length; offset += 1) {
     const index = reverse ? document.layers.length - offset - 1 : offset;
     const layer = document.layers[index]!;
     const parentGroupIndex = layer.parentGroupId
