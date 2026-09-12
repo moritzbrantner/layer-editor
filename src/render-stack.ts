@@ -75,8 +75,7 @@ export function getLayerEditorRenderStack<
     const parentGroupIndex = layer.parentGroupId
       ? groupIndexById.get(layer.parentGroupId)
       : undefined;
-    const groupIndex =
-      parentGroupIndex ?? membershipGroupIndexByLayerId.get(layer.id) ?? null;
+    const groupIndex = parentGroupIndex ?? membershipGroupIndexByLayerId.get(layer.id) ?? null;
     const group = groupIndex === null ? null : (groups[groupIndex] ?? null);
     const source = layer.sourceId ? (sourceById.get(layer.sourceId) ?? null) : null;
     const resolved = createResolvedLayer(layer, index, group, groupIndex, source);
