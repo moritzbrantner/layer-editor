@@ -1,5 +1,4 @@
 import { normalizeLayerEditorDocument } from "./document-normalization";
-import { findLayerEditorLayer } from "./queries";
 import {
   clampInsertIndex,
   createLayerEditorUniqueId,
@@ -221,16 +220,26 @@ export function duplicateLayerEditorLayer<
   layerId: string,
   options: LayerEditorDuplicateLayerOptions = {},
 ) {
-  const layer = findLayerEditorLayer(document, layerId);
+  const existingIds = new Set<string>();
+  let layer: LayerEditorLayer<TLayerData> | undefined;
+  let layerIndex = -1;
+
+  for (let index = 0; index < document.layers.length; index += 1) {
+    const candidate = document.layers[index]!;
+    existingIds.add(candidate.id);
+    if (layerIndex < 0 && candidate.id === layerId) {
+      layer = candidate;
+      layerIndex = index;
+    }
+  }
+
   if (!layer) {
     return document;
   }
 
-  const existingIds = new Set(document.layers.map((item) => item.id));
   const id =
     options.createId?.(layerId, existingIds) ??
     createLayerEditorUniqueId(`${layerId}-copy`, existingIds);
-  const layerIndex = document.layers.findIndex((item) => item.id === layerId);
   const index = options.index ?? layerIndex + 1;
 
   return addLayerEditorLayer(document, { ...layer, id, label: `${layer.label} Copy` }, { index });
