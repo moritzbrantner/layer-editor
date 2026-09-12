@@ -2,6 +2,7 @@ import { bench, describe } from "vitest";
 
 import {
   duplicateLayerEditorLayer,
+  getLayerEditorRenderStack,
   moveLayerEditorLayer,
   normalizeLayerEditorDocument,
   validateLayerEditorDocument,
@@ -17,6 +18,10 @@ describe("layer editor operations", () => {
 
   bench("validate 1,000 layers", () => {
     validateLayerEditorDocument(largeDocument);
+  });
+
+  bench("resolve render stack for 1,000 layers", () => {
+    getLayerEditorRenderStack(largeDocument);
   });
 
   bench("duplicate a middle layer", () => {
