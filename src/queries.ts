@@ -32,19 +32,31 @@ export function getLayerEditorGroupIds(document: LayerEditorDocument<unknown, un
 export function getLayerEditorLayersById<TLayerData = Record<string, unknown>>(
   document: LayerEditorDocument<TLayerData, unknown, unknown>,
 ) {
-  return new Map(document.layers.map((layer) => [layer.id, layer]));
+  const layersById = new Map<string, (typeof document.layers)[number]>();
+  for (const layer of document.layers) {
+    layersById.set(layer.id, layer);
+  }
+  return layersById;
 }
 
 export function getLayerEditorGroupsById<TGroupData = Record<string, unknown>>(
   document: LayerEditorDocument<unknown, TGroupData, unknown>,
 ) {
-  return new Map((document.groups ?? []).map((group) => [group.id, group]));
+  const groupsById = new Map<string, NonNullable<typeof document.groups>[number]>();
+  for (const group of document.groups ?? []) {
+    groupsById.set(group.id, group);
+  }
+  return groupsById;
 }
 
 export function getLayerEditorSourcesById<TSourceData = Record<string, unknown>>(
   document: LayerEditorDocument<unknown, unknown, TSourceData>,
 ) {
-  return new Map((document.sources ?? []).map((source) => [source.id, source]));
+  const sourcesById = new Map<string, NonNullable<typeof document.sources>[number]>();
+  for (const source of document.sources ?? []) {
+    sourcesById.set(source.id, source);
+  }
+  return sourcesById;
 }
 
 export function getLayerEditorGroupLayers<TLayerData = Record<string, unknown>>(
@@ -66,6 +78,11 @@ export function getLayerEditorGroupLayers<TLayerData = Record<string, unknown>>(
 export function getLayerEditorUngroupedLayers<TLayerData = Record<string, unknown>>(
   document: LayerEditorDocument<TLayerData, unknown, unknown>,
 ) {
-  const groupedLayerIds = new Set(document.groups?.flatMap((group) => group.layerIds) ?? []);
+  const groupedLayerIds = new Set<string>();
+  for (const group of document.groups ?? []) {
+    for (const layerId of group.layerIds) {
+      groupedLayerIds.add(layerId);
+    }
+  }
   return document.layers.filter((layer) => !layer.parentGroupId && !groupedLayerIds.has(layer.id));
 }

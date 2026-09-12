@@ -2,7 +2,9 @@ import { bench, describe } from "vitest";
 
 import {
   duplicateLayerEditorLayer,
+  getLayerEditorLayersById,
   getLayerEditorRenderStack,
+  getLayerEditorUngroupedLayers,
   moveLayerEditorLayer,
   normalizeLayerEditorDocument,
   validateLayerEditorDocument,
@@ -18,6 +20,14 @@ describe("layer editor operations", () => {
 
   bench("validate 1,000 layers", () => {
     validateLayerEditorDocument(largeDocument);
+  });
+
+  bench("index 1,000 layers by id", () => {
+    getLayerEditorLayersById(largeDocument);
+  });
+
+  bench("find ungrouped layers", () => {
+    getLayerEditorUngroupedLayers(largeDocument);
   });
 
   bench("resolve render stack for 1,000 layers", () => {
