@@ -74,7 +74,7 @@
     "verify": "bun run verify:registry"
   },
   "dependencies": {
-    "@moritzbrantner/editor-core": "^0.3.0",
+    "@moenarch/editor-core": "^0.4.1",
     "@moritzbrantner/ui": "^0.9.1",
     "lucide-react": "^1.17.0"
   },

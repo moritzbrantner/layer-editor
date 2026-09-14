@@ -1,4 +1,4 @@
-import { EditorJsonParseError, EditorMigrationError } from "@moritzbrantner/editor-core";
+import { EditorJsonParseError, EditorMigrationError } from "@moenarch/editor-core";
 
 import { LayerEditorParseError, type LayerEditorParseIssueCode } from "./serialization-types";
 

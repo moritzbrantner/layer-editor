@@ -2,7 +2,7 @@ import {
   migrateEditorDocument,
   type EditorDocumentMigrations,
   type SerializedEditorDocument,
-} from "@moritzbrantner/editor-core";
+} from "@moenarch/editor-core";
 
 import { isRecord } from "./document-guards";
 import { layerEditorDocumentAdapter } from "./serialization-adapter";

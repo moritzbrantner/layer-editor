@@ -1,4 +1,4 @@
-import type { EditorBounds, EditorViewportState } from "@moritzbrantner/editor-core";
+import type { EditorBounds, EditorViewportState } from "@moenarch/editor-core";
 
 export type LayerEditorLayerKind = string;
 

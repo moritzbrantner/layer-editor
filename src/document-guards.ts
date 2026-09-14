@@ -1,4 +1,4 @@
-import { isEditorRecord } from "@moritzbrantner/editor-core";
+import { isEditorRecord } from "@moenarch/editor-core";
 
 import {
   layerEditorBlendModes,
