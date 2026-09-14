@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Replaced the legacy `@moritzbrantner/editor-core` dependency and imports with the current `@moenarch/editor-core` package identity.
+- Source-family verification now builds and tests Layer Editor against the current editor-core source checkout, while the semver dependency remains the registry/release fallback.
+- Updated the layer entity projection to use the current generic `EditorEntityDocument` primitive instead of removed layer-specific editor-core helpers.
+
 ## 0.2.0
 
 ### Added
