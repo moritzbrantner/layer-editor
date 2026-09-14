@@ -1,4 +1,4 @@
-import type { SerializedEditorDocument } from "@moritzbrantner/editor-core";
+import type { SerializedEditorDocument } from "@moenarch/editor-core";
 
 import type { LayerEditorDocument } from "./types";
 

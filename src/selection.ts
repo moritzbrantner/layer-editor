@@ -3,7 +3,7 @@ import {
   getEditorSelectedEntityIds,
   getEditorSelectionPrimaryEntityId,
   normalizeEditorSelection,
-} from "@moritzbrantner/editor-core";
+} from "@moenarch/editor-core";
 
 import type { LayerEditorDocument, LayerEditorSelection } from "./types";
 

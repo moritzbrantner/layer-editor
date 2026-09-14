@@ -1,4 +1,4 @@
-import type { EditorEntityBase } from "@moritzbrantner/editor-core";
+import type { EditorEntityBase } from "@moenarch/editor-core";
 
 import type {
   LayerEditorBlendMode,

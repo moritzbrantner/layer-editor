@@ -1,7 +1,4 @@
-import {
-  createEditorEntityDocument,
-  type EditorEntityDocument,
-} from "@moenarch/editor-core";
+import { createEditorEntityDocument, type EditorEntityDocument } from "@moenarch/editor-core";
 
 import type { LayerEditorEntity } from "./operation-types";
 import type { LayerEditorDocument } from "./types";

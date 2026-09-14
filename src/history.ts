@@ -8,7 +8,7 @@ import {
   resetEditorSnapshotHistory,
   undoEditorSnapshotHistory,
   type EditorSnapshotHistory,
-} from "@moritzbrantner/editor-core";
+} from "@moenarch/editor-core";
 
 import { normalizeLayerEditorDocument, type LayerEditorDocument } from "./core";
 

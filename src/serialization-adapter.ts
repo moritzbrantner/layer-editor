@@ -1,4 +1,4 @@
-import type { EditorDocumentAdapter } from "@moritzbrantner/editor-core";
+import type { EditorDocumentAdapter } from "@moenarch/editor-core";
 
 import { normalizeLayerEditorDocument } from "./document-normalization";
 import { readValidatedLayerEditorDocument } from "./serialization-document-reader";

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const roots = ["src", "docs", "scripts", "README.md", "package.json"];
-const oldName = "@moritzbrantner/editor-core";
+const oldName = "@moenarch/editor-core";
 const newName = "@moenarch/editor-core";
 
 for (const root of roots) {
@@ -16,7 +16,9 @@ const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
 delete packageJson.dependencies?.[oldName];
 packageJson.dependencies ??= {};
 packageJson.dependencies[newName] = "^0.4.1";
-packageJson.dependencies = Object.fromEntries(Object.entries(packageJson.dependencies).sort(([a], [b]) => a.localeCompare(b)));
+packageJson.dependencies = Object.fromEntries(
+  Object.entries(packageJson.dependencies).sort(([a], [b]) => a.localeCompare(b)),
+);
 await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
 
 const sourceDepsPath = path.join(rootDir, "scripts/source-deps.mjs");

@@ -1,4 +1,4 @@
-import { EditorJsonParseError } from "@moritzbrantner/editor-core";
+import { EditorJsonParseError } from "@moenarch/editor-core";
 
 import { isRecord } from "./document-guards";
 import { validateLayerEditorDocument } from "./document-validation";

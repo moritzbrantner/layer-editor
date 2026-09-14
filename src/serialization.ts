@@ -2,7 +2,7 @@ import {
   readEditorDocument,
   serializeEditorDocument,
   type EditorDocumentAdapter,
-} from "@moritzbrantner/editor-core";
+} from "@moenarch/editor-core";
 
 import { isRecord } from "./document-guards";
 import { normalizeLayerEditorDocument } from "./document-normalization";

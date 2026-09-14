@@ -1,4 +1,4 @@
-import { createEditorViewportState } from "@moritzbrantner/editor-core";
+import { createEditorViewportState } from "@moenarch/editor-core";
 
 import { LayerEditorDocumentValidationError } from "./document-errors";
 import {
