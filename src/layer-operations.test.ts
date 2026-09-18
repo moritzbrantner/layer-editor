@@ -14,6 +14,8 @@ import {
   removeLayerEditorLayer,
   removeLayerEditorLayers,
   removeLayerEditorSource,
+  replaceLayerEditorLayer,
+  replaceLayerEditorLayers,
   setLayerEditorLayerLocked,
   setLayerEditorLayerVisibility,
   ungroupLayerEditorGroup,
@@ -105,6 +107,96 @@ describe("@moritzbrantner/layer-editor layer operations", () => {
     expect(duplicated.layers.find((layer) => layer.id === "mask-copy")?.parentGroupId).toBe(
       "content",
     );
+  });
+
+  test("replaces one grouped layer with multiple layers in the same composition slot", () => {
+    const grouped = addLayerEditorGroup(document, {
+      id: "content",
+      label: "Content",
+      layerIds: ["mask", "labels"],
+    });
+
+    const replaced = replaceLayerEditorLayer(grouped, "mask", [
+      { id: "mask-fill", kind: "shape", label: "Mask fill" },
+      { id: "mask-outline", kind: "shape", label: "Mask outline" },
+    ]);
+
+    expect(replaced.layers.map((layer) => layer.id)).toEqual([
+      "background",
+      "mask-fill",
+      "mask-outline",
+      "labels",
+    ]);
+    expect(replaced.groups?.[0]?.layerIds).toEqual(["mask-fill", "mask-outline", "labels"]);
+    expect(replaced.layers.find((layer) => layer.id === "mask-fill")?.parentGroupId).toBe(
+      "content",
+    );
+    expect(replaced.layers.find((layer) => layer.id === "mask-outline")?.parentGroupId).toBe(
+      "content",
+    );
+  });
+
+  test("replaces multiple layers with one layer at the first target position", () => {
+    const replaced = replaceLayerEditorLayers(document, ["labels", "mask"], [
+      { id: "merged-content", kind: "host-merged", label: "Merged content" },
+    ]);
+
+    expect(replaced.layers.map((layer) => layer.id)).toEqual(["background", "merged-content"]);
+    expect(replaced.layers[1]?.parentGroupId).toBeUndefined();
+  });
+
+  test("requires explicit group placement when replacement spans different groups", () => {
+    const grouped = createLayerEditorDocument({
+      groups: [
+        { id: "base", label: "Base", layerIds: ["background"] },
+        { id: "content", label: "Content", layerIds: ["mask", "labels"] },
+      ],
+      layers: [
+        { ...document.layers[0]!, parentGroupId: "base" },
+        { ...document.layers[1]!, parentGroupId: "content" },
+        { ...document.layers[2]!, parentGroupId: "content" },
+      ],
+    });
+
+    expect(
+      replaceLayerEditorLayers(grouped, ["background", "mask"], [
+        { id: "merged", kind: "host-merged", label: "Merged" },
+      ]),
+    ).toBe(grouped);
+
+    const replaced = replaceLayerEditorLayers(
+      grouped,
+      ["background", "mask"],
+      [{ id: "merged", kind: "host-merged", label: "Merged" }],
+      { parentGroupId: null },
+    );
+
+    expect(replaced.layers.map((layer) => layer.id)).toEqual(["merged", "labels"]);
+    expect(replaced.layers[0]?.parentGroupId).toBeUndefined();
+    expect(replaced.groups?.map((group) => [group.id, group.layerIds])).toEqual([
+      ["content", ["labels"]],
+    ]);
+  });
+
+  test("rejects partial and conflicting structural replacements", () => {
+    expect(
+      replaceLayerEditorLayers(document, ["mask", "missing"], [
+        { id: "merged", kind: "host-merged", label: "Merged" },
+      ]),
+    ).toBe(document);
+
+    expect(
+      replaceLayerEditorLayer(document, "mask", [
+        { id: "background", kind: "shape", label: "Conflicting id" },
+      ]),
+    ).toBe(document);
+
+    expect(
+      replaceLayerEditorLayer(document, "mask", [
+        { id: "replacement", kind: "shape", label: "Replacement" },
+        { id: "replacement", kind: "shape", label: "Duplicate replacement" },
+      ]),
+    ).toBe(document);
   });
 
   test("toggles visibility and lock state", () => {
