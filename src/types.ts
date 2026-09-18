@@ -131,6 +131,10 @@ export type LayerEditorDuplicateLayerOptions = {
   index?: number;
 };
 
+export type LayerEditorReplaceLayersOptions = {
+  parentGroupId?: string | null;
+};
+
 export type LayerEditorRemoveGroupOptions = {
   removeLayers?: boolean;
 };
