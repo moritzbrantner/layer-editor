@@ -12,5 +12,9 @@
       "package:check": ["bun", "run", "test:package"],
       "benchmark:smoke": ["bun", "run", "bench"]
     }
+  },
+  "merge": {
+    "authority": "hosted",
+    "requiredChecks": ["fast-validation / Fast Validation"]
   }
 }
