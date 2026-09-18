@@ -137,9 +137,11 @@ describe("@moritzbrantner/layer-editor layer operations", () => {
   });
 
   test("replaces multiple layers with one layer at the first target position", () => {
-    const replaced = replaceLayerEditorLayers(document, ["labels", "mask"], [
-      { id: "merged-content", kind: "host-merged", label: "Merged content" },
-    ]);
+    const replaced = replaceLayerEditorLayers(
+      document,
+      ["labels", "mask"],
+      [{ id: "merged-content", kind: "host-merged", label: "Merged content" }],
+    );
 
     expect(replaced.layers.map((layer) => layer.id)).toEqual(["background", "merged-content"]);
     expect(replaced.layers[1]?.parentGroupId).toBeUndefined();
@@ -159,9 +161,11 @@ describe("@moritzbrantner/layer-editor layer operations", () => {
     });
 
     expect(
-      replaceLayerEditorLayers(grouped, ["background", "mask"], [
-        { id: "merged", kind: "host-merged", label: "Merged" },
-      ]),
+      replaceLayerEditorLayers(
+        grouped,
+        ["background", "mask"],
+        [{ id: "merged", kind: "host-merged", label: "Merged" }],
+      ),
     ).toBe(grouped);
 
     const replaced = replaceLayerEditorLayers(
@@ -180,9 +184,11 @@ describe("@moritzbrantner/layer-editor layer operations", () => {
 
   test("rejects partial and conflicting structural replacements", () => {
     expect(
-      replaceLayerEditorLayers(document, ["mask", "missing"], [
-        { id: "merged", kind: "host-merged", label: "Merged" },
-      ]),
+      replaceLayerEditorLayers(
+        document,
+        ["mask", "missing"],
+        [{ id: "merged", kind: "host-merged", label: "Merged" }],
+      ),
     ).toBe(document);
 
     expect(
