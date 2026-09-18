@@ -294,9 +294,7 @@ export function replaceLayerEditorLayers<
     const firstTargetGroupIndex = group.layerIds.findIndex((layerId) =>
       targetLayerIds.has(layerId),
     );
-    const layerIdsWithoutTargets = group.layerIds.filter(
-      (layerId) => !targetLayerIds.has(layerId),
-    );
+    const layerIdsWithoutTargets = group.layerIds.filter((layerId) => !targetLayerIds.has(layerId));
 
     if (group.id !== parentGroupId) {
       return { ...group, layerIds: layerIdsWithoutTargets };
