@@ -95,6 +95,13 @@ Batch helpers are available for common multi-layer edits:
 `setLayerEditorLayersBlendMode`, `patchLayerEditorLayersStyle`, and
 `patchLayerEditorLayersBounds`.
 
+Structural replacement is available through `replaceLayerEditorLayer` and
+`replaceLayerEditorLayers`. Replacement layers occupy the first removed
+layer's document position. Shared group membership is preserved automatically;
+replacements spanning different groups require an explicit `parentGroupId`
+(or `null` for ungrouped placement). Hosts remain responsible for producing
+the replacement layer content, so merge/split semantics stay outside the core.
+
 ## History
 
 ```ts
