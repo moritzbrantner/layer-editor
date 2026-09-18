@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Added structural layer replacement primitives for host-defined merge and split workflows while preserving deterministic document order and explicit group placement.
+
 ### Changed
 
 - Replaced the legacy `@moritzbrantner/editor-core` dependency and imports with the current `@moenarch/editor-core` package identity.

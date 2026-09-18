@@ -12,6 +12,7 @@ import type {
   LayerEditorDocument,
   LayerEditorDuplicateLayerOptions,
   LayerEditorLayer,
+  LayerEditorReplaceLayersOptions,
 } from "./types";
 
 export function addLayerEditorLayer<
@@ -209,6 +210,109 @@ export function removeLayerEditorLayers<
     },
     { mode: "repair" },
   );
+}
+
+export function replaceLayerEditorLayer<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>(
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+  layerId: string,
+  replacementLayers: readonly LayerEditorLayer<TLayerData>[],
+  options: LayerEditorReplaceLayersOptions = {},
+) {
+  return replaceLayerEditorLayers(document, [layerId], replacementLayers, options);
+}
+
+export function replaceLayerEditorLayers<
+  TLayerData = Record<string, unknown>,
+  TGroupData = Record<string, unknown>,
+  TSourceData = Record<string, unknown>,
+>(
+  document: LayerEditorDocument<TLayerData, TGroupData, TSourceData>,
+  layerIds: readonly string[],
+  replacementLayers: readonly LayerEditorLayer<TLayerData>[],
+  options: LayerEditorReplaceLayersOptions = {},
+) {
+  const targetLayerIds = new Set(layerIds);
+  if (targetLayerIds.size === 0) {
+    return document;
+  }
+
+  const targetLayers = document.layers.filter((layer) => targetLayerIds.has(layer.id));
+  if (targetLayers.length !== targetLayerIds.size) {
+    return document;
+  }
+
+  const remainingLayerIds = new Set(
+    document.layers.filter((layer) => !targetLayerIds.has(layer.id)).map((layer) => layer.id),
+  );
+  const replacementLayerIds = new Set<string>();
+
+  for (const replacementLayer of replacementLayers) {
+    if (
+      replacementLayerIds.has(replacementLayer.id) ||
+      remainingLayerIds.has(replacementLayer.id)
+    ) {
+      return document;
+    }
+
+    replacementLayerIds.add(replacementLayer.id);
+  }
+
+  let parentGroupId: string | undefined;
+  if (options.parentGroupId !== undefined) {
+    parentGroupId = options.parentGroupId ?? undefined;
+    if (
+      parentGroupId !== undefined &&
+      !document.groups?.some((group) => group.id === parentGroupId)
+    ) {
+      return document;
+    }
+  } else {
+    const targetGroupIds = new Set(targetLayers.map((layer) => layer.parentGroupId));
+    if (targetGroupIds.size > 1) {
+      return document;
+    }
+
+    parentGroupId = targetLayers[0]?.parentGroupId;
+  }
+
+  const firstTargetIndex = document.layers.findIndex((layer) => targetLayerIds.has(layer.id));
+  const layers = document.layers.filter((layer) => !targetLayerIds.has(layer.id));
+  layers.splice(
+    firstTargetIndex,
+    0,
+    ...replacementLayers.map((layer) => ({
+      ...layer,
+      parentGroupId,
+    })),
+  );
+
+  const groups = document.groups?.map((group) => {
+    const firstTargetGroupIndex = group.layerIds.findIndex((layerId) =>
+      targetLayerIds.has(layerId),
+    );
+    const layerIdsWithoutTargets = group.layerIds.filter((layerId) => !targetLayerIds.has(layerId));
+
+    if (group.id !== parentGroupId) {
+      return { ...group, layerIds: layerIdsWithoutTargets };
+    }
+
+    const insertIndex =
+      firstTargetGroupIndex < 0
+        ? layerIdsWithoutTargets.length
+        : group.layerIds
+            .slice(0, firstTargetGroupIndex)
+            .filter((layerId) => !targetLayerIds.has(layerId)).length;
+
+    const layerIds = [...layerIdsWithoutTargets];
+    layerIds.splice(insertIndex, 0, ...replacementLayers.map((layer) => layer.id));
+    return { ...group, layerIds };
+  });
+
+  return normalizeChangedLayerEditorDocument(document, { ...document, groups, layers });
 }
 
 export function duplicateLayerEditorLayer<

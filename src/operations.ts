@@ -39,6 +39,8 @@ export {
   patchLayerEditorLayersStyle,
   removeLayerEditorLayer,
   removeLayerEditorLayers,
+  replaceLayerEditorLayer,
+  replaceLayerEditorLayers,
   setLayerEditorLayersBlendMode,
   setLayerEditorLayersLocked,
   setLayerEditorLayersOpacity,
