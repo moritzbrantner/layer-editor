@@ -60,7 +60,7 @@
     "source:smoke": "node scripts/source-deps.mjs smoke",
     "source:restore": "node scripts/source-deps.mjs restore",
     "format": "oxfmt README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts styles.css src examples scripts docs",
-    "format:check": "oxfmt --check README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts styles.css src examples scripts docs || (oxfmt src/layer-operations.ts src/layer-operations.test.ts && git diff -- src/layer-operations.ts src/layer-operations.test.ts && false)",
+    "format:check": "oxfmt --check README.md package.json tsconfig.base.json tsconfig.json vitest.config.ts styles.css src examples scripts docs",
     "lint": "oxlint src examples --format=github",
     "prepack": "bun run build",
     "check-types": "tsc --noEmit && tsc --noEmit -p examples/tsconfig.json",
