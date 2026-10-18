@@ -15,6 +15,6 @@
   },
   "merge": {
     "authority": "hosted",
-    "requiredChecks": ["fast-validation / Fast Validation"]
+    "requiredChecks": ["merge-ready"]
   }
 }
