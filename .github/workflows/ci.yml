@@ -12,6 +12,44 @@ permissions:
   packages: read
 
 jobs:
+  validation-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      performance: ${{ steps.scope.outputs.performance }}
+      allow-skipped: ${{ steps.scope.outputs.allow-skipped }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - id: scope
+        shell: python
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          import json
+          import os
+          import re
+          import subprocess
+
+          # GitHub path filters: '*' stays within a segment; '**' crosses segments.
+          def matches(path, pattern):
+              parts = re.split(r"(\*\*/|\*\*|\*|\?)", pattern)
+              expression = "".join({"**/": "(?:.*/)?", "**": ".*", "*": "[^/]*", "?": "[^/]"}.get(part, re.escape(part)) for part in parts)
+              return re.fullmatch(expression, path) is not None
+
+          required = False
+          if os.environ["GITHUB_EVENT_NAME"] == "pull_request":
+              paths = subprocess.check_output(["git", "diff", "--name-only", "-z", os.environ["BASE_SHA"] + "..." + os.environ["HEAD_SHA"]]).decode().split("\0")
+              patterns = ['src/**', 'tests/**', 'bench/**', 'package.json', 'bun.lock', 'vite.config.*', '.github/workflows/performance.yml']
+              required = any(matches(path, pattern) for path in paths for pattern in patterns)
+          skipped = [] if required else ["performance-validation"]
+          if os.environ["GITHUB_EVENT_NAME"] != "pull_request":
+              skipped.append("source-validation")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"performance={str(required).lower()}", file=output)
+              print(f"allow-skipped={json.dumps(skipped)}", file=output)
+
   fast-validation:
     uses: moritzbrantner/reusable-workflows/.github/workflows/fast-validation.yml@0415977e9d98d7708ee0e094ed558c95ff72b3bc # workflow-standard-v1
     with:
@@ -25,3 +63,25 @@ jobs:
       unit_test_command: bun run test
     secrets:
       GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+
+  source-validation:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/source-validation.yml
+
+  performance-validation:
+    needs: validation-scope
+    if: needs.validation-scope.outputs.performance == 'true'
+    uses: ./.github/workflows/performance.yml
+    secrets: inherit
+
+  merge-ready:
+    name: merge-ready
+    if: always()
+    needs: ["fast-validation", "validation-scope", "source-validation", "performance-validation"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: moritzbrantner/reusable-workflows/.github/actions/merge-ready@b0f25f241d76af2584dfc9e375084ff5c5cb97da
+        with:
+          needs: ${{ toJSON(needs) }}
+          required: '["fast-validation", "validation-scope", "source-validation", "performance-validation"]'
+          allow-skipped: ${{ needs.validation-scope.outputs.allow-skipped || '[]' }}

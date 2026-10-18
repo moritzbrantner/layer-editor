@@ -1,15 +1,7 @@
 name: Performance Validation
 
 on:
-  pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "bench/**"
-      - "package.json"
-      - "bun.lock"
-      - "vite.config.*"
-      - ".github/workflows/performance.yml"
+  workflow_call:
   push:
     branches:
       - main
@@ -28,7 +20,7 @@ permissions:
   packages: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: layer-editor-performance-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
