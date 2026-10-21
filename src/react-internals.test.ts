@@ -8,7 +8,6 @@ import {
   getLayerSelectionRange,
   getRelativeVisibleLayerId,
   getTreeItemElement,
-  isEditableKeyboardTarget,
   mergeLayerSelections,
   resolveLayerSelectionAnchor,
 } from "./react-keyboard";
@@ -198,24 +197,6 @@ describe("@moritzbrantner/layer-editor React internals", () => {
     expect(getRelativeVisibleLayerId(visibleLayerIds, "mask", 2)).toBe("overlay");
     expect(getRelativeVisibleLayerId(visibleLayerIds, "background", -1)).toBe("background");
     expect(getRelativeVisibleLayerId(visibleLayerIds, "missing", 1)).toBeNull();
-  });
-
-  test("detects editable keyboard targets", () => {
-    const wrapper = document.createElement("div");
-    wrapper.innerHTML = `
-      <label><input /></label>
-      <div contenteditable="true"><span data-editable-child></span></div>
-      <button type="button"></button>
-    `;
-
-    expect(isEditableKeyboardTarget(wrapper.querySelector("input") as HTMLInputElement)).toBe(true);
-    expect(
-      isEditableKeyboardTarget(wrapper.querySelector("[data-editable-child]") as Element),
-    ).toBe(true);
-    expect(isEditableKeyboardTarget(wrapper.querySelector("button") as HTMLButtonElement)).toBe(
-      false,
-    );
-    expect(isEditableKeyboardTarget(new Event("keydown"))).toBe(false);
   });
 
   test("focuses tree items from DOM position and tree item keys", () => {

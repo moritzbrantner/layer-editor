@@ -9,6 +9,8 @@ import {
   type SetStateAction,
 } from "react";
 
+import { isEditorEditableTarget } from "@moenarch/editor-core";
+
 import {
   focusEdgeTreeItem,
   focusRelativeTreeItem,
@@ -16,7 +18,6 @@ import {
   getLayerSelectionRange,
   getRelativeVisibleLayerId,
   getTreeItemElement,
-  isEditableKeyboardTarget,
   mergeLayerSelections,
   resolveLayerSelectionAnchor,
 } from "./react-keyboard";
@@ -211,7 +212,7 @@ export function useLayerEditorPanelInteractions<
 
   const handlePanelKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (!resolvedFeatures.keyboardCommands || isEditableKeyboardTarget(event.target)) {
+      if (!resolvedFeatures.keyboardCommands || isEditorEditableTarget(event.target)) {
         return;
       }
 
