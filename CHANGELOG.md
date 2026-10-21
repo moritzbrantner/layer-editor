@@ -9,8 +9,9 @@
 ### Changed
 
 - Replaced the legacy `@moritzbrantner/editor-core` dependency and imports with the current `@moenarch/editor-core` package identity.
-- Source-family verification now builds and tests Layer Editor against the current editor-core source checkout, while the semver dependency remains the registry/release fallback.
+- Source-family verification now builds and tests Layer Editor against the current editor-core source checkout.
 - Updated the layer entity projection to use the current generic `EditorEntityDocument` primitive instead of removed layer-specific editor-core helpers.
+- Depend on `@moenarch/editor-core` `main` as a commit-pinned git dependency instead of `^0.4.1`. Git consumers also list `@moenarch/editor-core` in `trustedDependencies` so its `prepare` build runs. Keyboard commands use editor-core's `isEditorEditableTarget` directly; the local `isEditableKeyboardTarget` copy is removed.
 
 ## 0.2.0
 

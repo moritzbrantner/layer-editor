@@ -1,15 +1,5 @@
 import type { LayerEditorSelection } from "./core";
 
-export function isEditableKeyboardTarget(target: EventTarget) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  return Boolean(
-    target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'),
-  );
-}
-
 export function resolveLayerSelectionAnchor(
   anchorLayerId: string | null,
   selection: LayerEditorSelection,
