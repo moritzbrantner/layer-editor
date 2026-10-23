@@ -27,7 +27,7 @@ jobs:
   performance-validation:
     uses: moritzbrantner/reusable-workflows/.github/workflows/performance-validation.yml@0415977e9d98d7708ee0e094ed558c95ff72b3bc # workflow-standard-v1
     with:
-      node_version: "24"
+      node_version: lts/*
       bun_version: latest
       install_command: bun install --frozen-lockfile
       build_command: bun run build
