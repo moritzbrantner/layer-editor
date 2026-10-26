@@ -74,7 +74,7 @@
     "verify": "bun run verify:registry"
   },
   "dependencies": {
-    "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#13bd7bbd0e6d482fa0325361b6cad7b94ee40a32",
+    "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#898f0ab8c61b6188fc87f758d1b057580a683672",
     "@moritzbrantner/ui": "^0.10.0",
     "lucide-react": "^1.17.0"
   },
