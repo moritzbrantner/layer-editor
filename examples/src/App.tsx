@@ -1,5 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, Tabs, TabsList, TabsTrigger } from "@moritzbrantner/ui";
+import {
+  EditorPane,
+  EditorPaneContent,
+  EditorPaneHeader,
+  EditorPaneLayout,
+  EditorPaneMain,
+  EditorPaneToggle,
+  EditorToolbar,
+  EditorToolbarGroup,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@moritzbrantner/ui";
 import { useEffect, useState } from "react";
 
 import {
@@ -21,6 +33,10 @@ import {
   type ExampleKey,
 } from "./example-types";
 import { renderLayerMeta } from "./example-utils";
+
+const layersPaneId = "layer-editor-layers";
+const propertiesPaneId = "layer-editor-properties";
+const documentPaneId = "layer-editor-document";
 
 export function App() {
   const examplesQuery = useQuery({
@@ -84,95 +100,130 @@ export function App() {
   };
 
   return (
-    <main className="min-h-screen bg-[#e8ece7] p-4 text-[#21302d] md:p-6">
-      <header className="mx-auto mb-[18px] grid max-w-[1320px] gap-5 md:flex md:items-end md:justify-between">
-        <div>
-          <p className="mb-1 text-[0.82rem] font-bold uppercase text-[#61726d]">
-            @moritzbrantner/layer-editor
-          </p>
-          <h1 className="text-[clamp(2rem,5vw,4.2rem)] leading-[1.1] font-bold tracking-normal">
-            Layer Editor Examples
+    <main className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground">
+      <EditorPaneLayout orientation="vertical">
+        <EditorToolbar
+          aria-label="Workbench"
+          className="rounded-none border-x-0 border-t-0 shadow-none"
+          overflow="scroll"
+        >
+          <EditorToolbarGroup aria-label="Panes">
+            <EditorPaneToggle paneId={layersPaneId} />
+          </EditorToolbarGroup>
+          <h1 className="min-w-0 truncate text-sm font-semibold max-[480px]:sr-only">
+            Layer Editor
           </h1>
-        </div>
-        <Tabs
-          value={activeExample}
-          onValueChange={(value) => setActiveExample(value as ExampleKey)}
-        >
-          <TabsList aria-label="Examples" className="grid grid-cols-3">
-            {(Object.keys(exampleLabels) as ExampleKey[]).map((example) => (
-              <TabsTrigger key={example} value={example}>
-                {exampleLabels[example]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </header>
+          <Tabs
+            className="ms-auto"
+            value={activeExample}
+            onValueChange={(value) => setActiveExample(value as ExampleKey)}
+          >
+            <TabsList aria-label="Examples">
+              {(Object.keys(exampleLabels) as ExampleKey[]).map((example) => (
+                <TabsTrigger key={example} value={example}>
+                  {exampleLabels[example]}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <EditorToolbarGroup aria-label="Inspector panes">
+            <EditorPaneToggle paneId={documentPaneId} />
+            <EditorPaneToggle paneId={propertiesPaneId} />
+          </EditorToolbarGroup>
+        </EditorToolbar>
 
-      <section
-        className="mx-auto grid max-w-[1320px] grid-cols-1 gap-4 min-[960px]:grid-cols-[minmax(0,1fr)_360px]"
-        aria-label={`${exampleLabels[activeExample]} example`}
-      >
-        <Card
-          aria-label="Layer preview"
-          className="min-h-0 overflow-hidden min-[960px]:min-h-[610px]"
-        >
-          <CardContent className="grid h-full items-center p-3 min-[960px]:p-6">
-            <ExamplePreview document={document} example={activeExample} selection={selection} />
-          </CardContent>
-        </Card>
+        <EditorPaneMain className="flex min-h-0 flex-col overflow-hidden">
+          <EditorPaneLayout>
+            <EditorPane
+              rail={false}
+              collapsible
+              defaultSize={320}
+              id={layersPaneId}
+              label="Layers"
+              maxSize={480}
+              minSize={240}
+              side="start"
+            >
+              <EditorPaneHeader title="Layers" />
+              <EditorPaneContent>
+                <LayerEditorPanel
+                  createLayer={({ existingIds }) => createExampleLayer(activeExample, existingIds)}
+                  document={document}
+                  features={{ historyControls: true }}
+                  history={history}
+                  renderLayerMeta={renderLayerMeta}
+                  selection={selection}
+                  onHistoryChange={(nextHistory) => setActiveHistory(nextHistory as ExampleHistory)}
+                  onSelectionChange={(nextSelection) =>
+                    setSelections((currentSelections) => ({
+                      ...currentSelections,
+                      [activeExample]: nextSelection,
+                    }))
+                  }
+                />
+              </EditorPaneContent>
+            </EditorPane>
 
-        <aside aria-label="Layer controls">
-          <Card>
-            <CardContent className="grid gap-4 p-3.5">
-              <LayerEditorPanel
-                createLayer={({ existingIds }) => createExampleLayer(activeExample, existingIds)}
-                document={document}
-                features={{ historyControls: true }}
-                history={history}
-                renderLayerMeta={renderLayerMeta}
-                selection={selection}
-                onHistoryChange={(nextHistory) => setActiveHistory(nextHistory as ExampleHistory)}
-                onSelectionChange={(nextSelection) =>
-                  setSelections((currentSelections) => ({
-                    ...currentSelections,
-                    [activeExample]: nextSelection,
-                  }))
-                }
-              />
+            <EditorPaneMain
+              aria-label={`${exampleLabels[activeExample]} preview`}
+              className="grid place-items-center bg-muted/30 p-3 md:p-6"
+              role="region"
+            >
+              <div className="w-full max-w-[960px]">
+                <ExamplePreview document={document} example={activeExample} selection={selection} />
+              </div>
+            </EditorPaneMain>
+
+            <EditorPane
+              rail={false}
+              collapsible
+              defaultSize={300}
+              id={propertiesPaneId}
+              label="Properties"
+              minSize={240}
+              side="end"
+            >
+              <EditorPaneHeader title="Properties" />
               <LayerControls
                 document={document}
                 layer={selectedLayer}
+                selectedCount={selection.layerIds.length}
                 onDocumentChange={setActiveDocument}
               />
-            </CardContent>
-          </Card>
-        </aside>
-      </section>
+            </EditorPane>
+          </EditorPaneLayout>
+        </EditorPaneMain>
 
-      <Card
-        aria-label="Serialized document"
-        className="mx-auto mt-4 hidden max-w-[1320px] overflow-hidden min-[560px]:block"
-      >
-        <CardContent className="p-4">
-          <h2 className="mb-3 text-base leading-[1.1] font-bold">Document</h2>
-          <pre className="max-h-[340px] overflow-auto rounded-lg bg-[#202927] p-3.5 text-[0.8rem] text-[#edf3e7]">
-            {JSON.stringify(serializeLayerEditorDocument(document), null, 2)}
-          </pre>
-        </CardContent>
-      </Card>
+        <EditorPane
+          rail={false}
+          collapsible
+          defaultCollapsed
+          defaultSize={240}
+          id={documentPaneId}
+          label="Serialized document"
+          maxSize={480}
+          minSize={120}
+          side="end"
+        >
+          <EditorPaneHeader title="Serialized document" />
+          <EditorPaneContent>
+            <pre className="m-0 rounded-md bg-muted p-3 font-mono text-xs leading-relaxed text-foreground">
+              {JSON.stringify(serializeLayerEditorDocument(document), null, 2)}
+            </pre>
+          </EditorPaneContent>
+        </EditorPane>
+      </EditorPaneLayout>
     </main>
   );
 }
 
 function ShellMessage({ detail, title }: { detail?: string; title: string }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-[#e8ece7] p-4 text-[#21302d]">
-      <Card className="w-full max-w-md">
-        <CardContent className="p-6">
-          <h1 className="text-2xl leading-[1.1] font-bold">{title}</h1>
-          {detail ? <p className="mt-3 text-sm text-[#61726d]">{detail}</p> : null}
-        </CardContent>
-      </Card>
+    <main className="grid h-dvh place-items-center bg-background p-4 text-foreground">
+      <div className="grid gap-2 text-center">
+        <h1 className="text-base font-semibold">{title}</h1>
+        {detail ? <p className="text-sm text-muted-foreground">{detail}</p> : null}
+      </div>
     </main>
   );
 }

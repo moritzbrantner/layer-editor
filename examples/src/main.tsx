@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
 import "@moritzbrantner/ui/studio/styles.css";
+import "@moritzbrantner/ui/component-sources.css";
 import "@moritzbrantner/layer-editor/styles.css";
 import "./styles.css";
 

@@ -1,12 +1,17 @@
 "use client";
 
-import { Button, Input } from "@moritzbrantner/ui";
+import {
+  Button,
+  EditorToolbar,
+  EditorToolbarButton,
+  EditorToolbarGroup,
+  Input,
+} from "@moritzbrantner/ui";
 import { Copy, FolderPlus, Plus, Redo2, Search, Trash2, Undo2, X } from "lucide-react";
 import type { DragEvent } from "react";
 
 import type { LayerEditorGroup } from "./core";
 import { joinClassNames } from "./react-class-names";
-import { IconButton } from "./react-icon-button";
 import type {
   LayerEditorController,
   LayerEditorDropTarget,
@@ -26,82 +31,86 @@ export function LayerEditorToolbar<
 }) {
   const hasSelectedLayers = controller.selection.layerIds.length > 0;
   const showHistoryControls = features.historyControls;
+  const shortcut = (hint: string) => (features.keyboardCommands ? hint : undefined);
 
   return (
-    <div className="mb-layer-editor__toolbar" role="toolbar">
-      <div className="mb-layer-editor__toolbar-group">
-        <IconButton
+    <EditorToolbar
+      aria-label="Layer commands"
+      className="mb-layer-editor__toolbar"
+      density="compact"
+    >
+      <EditorToolbarGroup aria-label="Layer actions" className="mb-layer-editor__toolbar-group">
+        <EditorToolbarButton
+          className="mb-layer-editor__icon-button"
           disabled={controller.readOnly}
+          icon={<Plus aria-hidden="true" size={16} />}
           label="Add layer"
-          tooltip="Add layer"
           onClick={(event) => {
             event.stopPropagation();
             controller.addLayer();
           }}
-        >
-          <Plus aria-hidden="true" size={16} />
-        </IconButton>
-        <IconButton
+        />
+        <EditorToolbarButton
+          className="mb-layer-editor__icon-button"
           disabled={controller.readOnly || !hasSelectedLayers}
+          icon={<Copy aria-hidden="true" size={16} />}
           label="Duplicate selected layers"
-          tooltip="Duplicate selected layers"
+          shortcut={shortcut("Mod+D")}
           onClick={(event) => {
             event.stopPropagation();
             controller.duplicateSelectedLayers();
           }}
-        >
-          <Copy aria-hidden="true" size={16} />
-        </IconButton>
-        <IconButton
+        />
+        <EditorToolbarButton
+          className="mb-layer-editor__icon-button"
           disabled={controller.readOnly || !hasSelectedLayers}
+          icon={<Trash2 aria-hidden="true" size={16} />}
           label="Delete selected layers"
-          tooltip="Delete selected layers"
+          shortcut={shortcut("Delete")}
           onClick={(event) => {
             event.stopPropagation();
             controller.removeSelectedLayers();
           }}
-        >
-          <Trash2 aria-hidden="true" size={16} />
-        </IconButton>
-        <IconButton
+        />
+        <EditorToolbarButton
+          className="mb-layer-editor__icon-button"
           disabled={controller.readOnly || !hasSelectedLayers}
+          icon={<FolderPlus aria-hidden="true" size={16} />}
           label="Group selected layers"
-          tooltip="Group selected layers"
+          shortcut={shortcut("Mod+G")}
           onClick={(event) => {
             event.stopPropagation();
             controller.groupSelectedLayers();
           }}
-        >
-          <FolderPlus aria-hidden="true" size={16} />
-        </IconButton>
-      </div>
+        />
+      </EditorToolbarGroup>
       {showHistoryControls ? (
-        <div className="mb-layer-editor__toolbar-group">
-          <IconButton
+        <EditorToolbarGroup aria-label="History" className="mb-layer-editor__toolbar-group">
+          <EditorToolbarButton
+            className="mb-layer-editor__icon-button"
             disabled={controller.readOnly || !controller.canUndo}
+            icon={<Undo2 aria-hidden="true" size={16} />}
             label="Undo"
-            tooltip="Undo"
+            shortcut={shortcut("Mod+Z")}
             onClick={(event) => {
               event.stopPropagation();
               controller.undo();
             }}
-          >
-            <Undo2 aria-hidden="true" size={16} />
-          </IconButton>
-          <IconButton
+          />
+          <EditorToolbarButton
+            className="mb-layer-editor__icon-button"
             disabled={controller.readOnly || !controller.canRedo}
+            icon={<Redo2 aria-hidden="true" size={16} />}
             label="Redo"
-            tooltip="Redo"
+            shortcut={shortcut("Mod+Shift+Z")}
             onClick={(event) => {
               event.stopPropagation();
               controller.redo();
             }}
-          >
-            <Redo2 aria-hidden="true" size={16} />
-          </IconButton>
-        </div>
+          />
+        </EditorToolbarGroup>
       ) : null}
-    </div>
+    </EditorToolbar>
   );
 }
 

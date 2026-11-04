@@ -150,6 +150,7 @@ through a built-in migration and normalize missing group visual fields to
 ```tsx
 import { useState } from "react";
 import "@moritzbrantner/ui/studio/styles.css";
+import "@moritzbrantner/ui/component-sources.css";
 import "@moritzbrantner/layer-editor/styles.css";
 import {
   LayerEditorPanel,
