@@ -6,6 +6,10 @@ import { LayerEditorPanel } from "./react";
 import { document, maskSelection } from "./react-test-fixtures";
 
 describe("@moritzbrantner/layer-editor React panel render and actions", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   test("renders groups, layers, and toolbar by default", () => {
     render(<LayerEditorPanel document={document} />);
 
@@ -15,6 +19,39 @@ describe("@moritzbrantner/layer-editor React panel render and actions", () => {
     expect(screen.getByText("50%")).toBeTruthy();
     expect(screen.getByRole("toolbar")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add layer" })).toBeTruthy();
+  });
+
+  test("moves toolbar focus with arrow keys through one tab stop", () => {
+    // Focusing a command opens its tooltip, which measures itself.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        disconnect() {}
+        observe() {}
+        unobserve() {}
+      },
+    );
+    render(<LayerEditorPanel document={document} selection={maskSelection} />);
+
+    const toolbar = screen.getByRole("toolbar", { name: "Layer commands" });
+    const addLayer = screen.getByRole("button", { name: "Add layer" });
+    const duplicate = screen.getByRole("button", { name: "Duplicate selected layers" });
+    const group = screen.getByRole("button", { name: "Group selected layers" });
+
+    expect(toolbar.querySelectorAll('[tabindex="0"]')).toHaveLength(1);
+    expect(addLayer.getAttribute("tabindex")).toBe("0");
+    expect(duplicate.getAttribute("tabindex")).toBe("-1");
+
+    addLayer.focus();
+    fireEvent.keyDown(addLayer, { key: "ArrowRight" });
+    expect(globalThis.document.activeElement).toBe(duplicate);
+    expect(duplicate.getAttribute("tabindex")).toBe("0");
+
+    fireEvent.keyDown(duplicate, { key: "End" });
+    expect(globalThis.document.activeElement).toBe(group);
+
+    fireEvent.keyDown(group, { key: "Home" });
+    expect(globalThis.document.activeElement).toBe(addLayer);
   });
 
   test("respects toolbar and menu feature flags", () => {
