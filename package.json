@@ -75,7 +75,7 @@
   },
   "dependencies": {
     "@moenarch/editor-core": "git+https://github.com/moritzbrantner/editor-core.git#4e4988c52b6e21b535494add35edd02b84e42aa0",
-    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#1df075b389466bf48a863d3e8541f9b9decb0394",
+    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#ab72fec473643398a75223dda0956a96cc95a9d8",
     "lucide-react": "^1.17.0"
   },
   "devDependencies": {
@@ -103,7 +103,7 @@
     "react-dom": "^19.0.0"
   },
   "overrides": {
-    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#1df075b389466bf48a863d3e8541f9b9decb0394"
+    "@moritzbrantner/ui": "git+https://github.com/moritzbrantner/ui.git#ab72fec473643398a75223dda0956a96cc95a9d8"
   },
   "engines": {
     "node": ">=20.19"
